@@ -31,7 +31,7 @@ class matern():
 def plot_bottom():
     N = 256
     f, axes = plt.subplots(4,1,sharey=True)
-    prior = matern(512, num_terms=N,s=1.5)
+    prior = matern(512, num_terms=N,s=.5)
 
     for i in range(4):
         p = np.random.standard_normal(N)
