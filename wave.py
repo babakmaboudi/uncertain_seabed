@@ -15,15 +15,15 @@ def boundary_diriichlet(x, on_boundary):
 
 class Boundary_W(SubDomain):
     def inside(self, x, on_boundary):
-        return on_boundary and near(x[0], 0., 1E-14)
+        return on_boundary and near(x[0], -2., 1E-14)
 
 class Boundary_E(SubDomain):
     def inside(self, x, on_boundary):
-        return on_boundary and near(x[0],1., 1E-14)
+        return on_boundary and near(x[0],2., 1E-14)
 
 class Boundary_N(SubDomain):
     def inside(self, x, on_boundary):
-        return on_boundary and near(x[1],1., 1E-14)
+        return on_boundary and near(x[1],1.5, 1E-14)
 
 class init_cond(UserExpression):
     def eval(elf, values, x):
@@ -32,6 +32,10 @@ class init_cond(UserExpression):
         values[0] += np.exp( -( (x[0] )**2 + (x[1] - 0.4)**2)/(0.05**2) )
         values[0] += np.exp( -( (x[0] - 0.4)**2 + (x[1] - 0.4)**2)/(0.05**2) )
         values[0] += np.exp( -( (x[0] - 0.8)**2 + (x[1] - 0.4)**2)/(0.05**2) )
+
+class x_boundary(UserExpression):
+    def eval(self, values, x):
+        values[0] = x[0]
 
 class wave_speed(UserExpression):
     def __init__(self, loc, **kwargs):
@@ -44,16 +48,30 @@ class wave_speed(UserExpression):
         else:
             values[0] = 6.4
 
+class source_term(UserExpression):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.t = 0
+        self.fmT = 10
+
+    def eval(self, values, x):
+        values[0] = (1- 2*np.pi**2*self.fmT**2*self.t**2 ) * np.exp( -np.pi**2*self.fmT**2*self.t**2  ) * np.exp( -( (x[0] + 1.8 )**2 + (x[1] - 1.4)**2)/(0.05**2) )
+        values[0] += (1- 2*np.pi**2*self.fmT**2*self.t**2 ) * np.exp( -np.pi**2*self.fmT**2*self.t**2  ) * np.exp( -( (x[0] + 0.9 )**2 + (x[1] - 1.4)**2)/(0.05**2) )
+        values[0] += (1- 2*np.pi**2*self.fmT**2*self.t**2 ) * np.exp( -np.pi**2*self.fmT**2*self.t**2  ) * np.exp( -( (x[0] )**2 + (x[1] - 1.4)**2)/(0.05**2) )
+        values[0] += (1- 2*np.pi**2*self.fmT**2*self.t**2 ) * np.exp( -np.pi**2*self.fmT**2*self.t**2  ) * np.exp( -( (x[0] - 0.9)**2 + (x[1] - 1.4)**2)/(0.05**2) )
+        values[0] += (1- 2*np.pi**2*self.fmT**2*self.t**2 ) * np.exp( -np.pi**2*self.fmT**2*self.t**2  ) * np.exp( -( (x[0] - 1.8)**2 + (x[1] - 1.4)**2)/(0.05**2) )
+
 class wave_speed_matern(UserExpression):
     def __init__(self, N_x, N_kl, **kwargs):
-        self.field = matern(N_x, num_terms=N_kl,s=4)
-        self.x_grid = np.linspace(-1.001,1.001,N_x)
+        self.field = matern(N_x, num_terms=N_kl,s=6)
+        self.x_grid = np.linspace(-2.001,2.001,N_x)
         self.curve = np.zeros(N_x)
+        self.var = 2
 
         super().__init__(**kwargs)
 
     def assemble_curve(self, p):
-        self.curve = self.field.assemble(p)
+        self.curve = self.var*self.field.assemble(p)
 
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
@@ -74,21 +92,24 @@ class wave():
     def __init__(self):
         # defining the mesh
         #self.mesh = UnitSquareMesh(100,100)
-        domain = mshr.Rectangle(Point(-1,-0.5), Point(1,0.5))
+        domain = mshr.Rectangle(Point(-2,-1.5), Point(2,1.5))
         self.mesh = mshr.generate_mesh(domain, 60)
 
         # defining the function space
         self.V = FunctionSpace(self.mesh,'CG', 1)
 
         FEM_el = self.V.ufl_element()
-        init = init_cond(element=FEM_el)
-        #dummy = Function(self.V)
-        #dummy = interpolate( init, self.V )
-        #file = File('init.pvd')
-        #file << dummy
-        #exit()
+        data = np.load('./model_params/state.npz')
+        self.init_u = data['u_past_np']
+        self.init_v = data['v_past_np']
 
-        self.dt = 0.002
+        # extracting the indecies of the solution at the top boundary
+        self.compute_boundary_indecies()
+
+        #self.source = source_term(element=FEM_el)
+        #self.source_func = Function(self.V)
+
+        self.dt = 0.005
 
         # defining test and trial spaces
         u0 = Constant('0.0')
@@ -100,7 +121,6 @@ class wave():
         N_x = 256
         N_kl = 64
         self.speed_function = wave_speed_matern(N_x,N_kl,element=FEM_el)
-        p = np.random.standard_normal(N_kl)
         self.c = Function(self.V)
 
         # marking domain boundaries
@@ -121,22 +141,22 @@ class wave():
 
         #defining functions to hold the previous time-step
         self.u_past = Function( self.V )
-        self.u_past = interpolate(init, self.V )
+        #self.u_past = interpolate(init, self.V )
         self.v_past = Function( self.V )
 
-        # defining the weakforms for the velocity and pressure equations
         self.a1 = self.v*self.t*dx 
-        self.L1 = self.v_past*self.t*dx - self.dt/2*self.c*inner( grad(self.u_past), grad(self.t) )*dx - self.dt/2*self.v_past*self.t*ds(0) - self.dt/2*self.v_past*self.t*ds(1) - self.dt/2*u0*self.t*ds(2)
+        self.L1 = self.v_past*self.t*dx - self.dt/2*self.c*inner( grad(self.u_past), grad(self.t) )*dx - self.dt/2*self.v_past*self.t*ds(0) - self.dt/2*self.v_past*self.t*ds(1) - self.dt/2*u0*self.t*ds(2) #+ self.dt/2*self.source*self.t*dx
 
         self.a2 = self.u*self.t*dx 
         self.L2 = self.u_past*self.t*dx + self.dt*self.v_past*self.t*dx
 
-        # temporary functions
         self.temp = Function(self.V)
 
+    # projecting the wave speed function onto the FEM basis
     def compute_wave_speed(self, p):
         self.speed_function.assemble_curve(p)
-        self.c = interpolate(self.speed_function, self.V)
+        temp = interpolate(self.speed_function, self.V)
+        self.c.vector().set_local( temp.vector().get_local() )
 
     # defining the second order symplectic integrator
     def stormer_verlet_step(self):
@@ -155,20 +175,94 @@ class wave():
 
     # this subroutine  advances the PDE in time
     def time_stepping(self):
-
-        # computing the LU decomposition of the mass matrix
         A = assemble(self.a1)
         self.solver = LUSolver(A)
 
-        for i in progressbar( range(500) ):
-            # apply one time step
-            self.stormer_verlet_step()
+        #sol = Function(self.V)
 
+        path = './solution/sol.pvd'
+        file = File(path)
+
+        #t = 0
+        for i in progressbar( range(600) ):
+            self.stormer_verlet_step()
+        #    t += self.dt
+        #    self.source.t = t
+            if( np.mod(i,10) == 0 ):
+                file << (self.u_past, i*self.dt)
+
+    def read_boundary(self):
+        A = assemble(self.a1)
+        self.solver = LUSolver(A)
+
+        out = []
+        for i in progressbar( range(600) ):
+            self.stormer_verlet_step()
+            out.append( self.u_past.vector().get_local()[self.bnd_idx].reshape(1,-1) )
+        return np.concatenate(out, axis=0)
+
+    def compute_boundary_indecies(self):
+        FEM_el = self.V.ufl_element()
+        boundary = lambda x, on_boundary: on_boundary and near(x[1],1.5, 1E-14)
+        u0 = Constant('0.0')
+        zero_bc = DirichletBC(self.V, u0, boundary)
+
+        dummy = Function(self.V)
+        dummy.vector().set_local( np.ones_like( dummy.vector().get_local() ) )
+        zero_bc.apply( dummy.vector() )
+        self.bnd_idx = np.argwhere( dummy.vector().get_local() == 0 ).flatten()
+
+        x_func = x_boundary(element=FEM_el)
+        x_bnd = DirichletBC(self.V, x_func, boundary)
+        func = Function(self.V)
+        x_bnd.apply( func.vector() )
+        x_coords = func.vector().get_local()[self.bnd_idx]
+        sorted_idx = np.argsort(x_coords)
+
+        self.bnd_idx = self.bnd_idx[sorted_idx]
+
+
+    def forward(self, p):
+        self.compute_wave_speed(p)
+        self.u_past.vector().set_local( self.init_u )
+        self.v_past.vector().set_local( self.init_v )
+
+        return self.read_boundary()
+        
+    def save_state(self):
+        np.savez('stat2.npz', u_past_np=self.u_past.vector().get_local(), v_past_np=self.v_past.vector().get_local())
+
+    def load_state(self):
+        data = np.load('./model_params/state.npz')
+        u_past = data['u_past_np']
+        v_past = data['v_past_np']
+
+        self.u_past.vector().set_local( u_past )
+        self.v_past.vector().set_local( v_past )
 if __name__ == '__main__':
     problem = wave()
 
     # p is the parameters defining the random seabed curve
     p = np.random.standard_normal(64)
-    problem.compute_wave_speed(p)
+    temp1 = problem.forward(p)
+    plt.figure()
+    plt.imshow(temp1)
+    plt.colorbar()
+    plt.savefig('fig1.pdf',format='pdf',dpi=300)
+
+    p = np.random.standard_normal(64)
+    temp2 = problem.forward(p)
+    plt.figure()
+    plt.imshow(temp2)
+    plt.colorbar()
+    plt.savefig('fig2.pdf',format='pdf',dpi=300)
+
+    plt.figure()
+    plt.imshow( np.abs( temp2 - temp1 ) )
+    plt.colorbar()
+    plt.savefig('fig3.pdf',format='pdf',dpi=300)
+    #problem.compute_wave_speed(p)
     
-    problem.time_stepping()
+    #problem.time_stepping()
+    #problem.save_state()
+    #problem.forward(p)
