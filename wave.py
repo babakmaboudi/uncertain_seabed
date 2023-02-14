@@ -6,7 +6,7 @@ from matern import matern
 from progressbar import progressbar
 
 from dolfin import *
-import mshr
+#import mshr
 
 set_log_level(50)
 
@@ -73,6 +73,9 @@ class wave_speed_matern(UserExpression):
     def assemble_curve(self, p):
         self.curve = self.var*self.field.assemble(p)
 
+    def give_curve(self, p):
+        return self.var*self.field.assemble(p)
+
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
         loc = ( temp[:-1] )*( ~temp[1:] )
@@ -92,8 +95,11 @@ class wave():
     def __init__(self):
         # defining the mesh
         #self.mesh = UnitSquareMesh(100,100)
-        domain = mshr.Rectangle(Point(-2,-1.5), Point(2,1.5))
-        self.mesh = mshr.generate_mesh(domain, 60)
+        #domain = mshr.Rectangle(Point(-2,-1.5), Point(2,1.5))
+        #self.mesh = mshr.generate_mesh(domain, 60)
+        #mesh_file = File('./model_params/mesh_fine.xml')
+        #mesh_file << self.mesh
+        self.mesh = Mesh('./model_params/mesh.xml')
 
         # defining the function space
         self.V = FunctionSpace(self.mesh,'CG', 1)
@@ -196,7 +202,7 @@ class wave():
         self.solver = LUSolver(A)
 
         out = []
-        for i in progressbar( range(600) ):
+        for i in range(600):
             self.stormer_verlet_step()
             out.append( self.u_past.vector().get_local()[self.bnd_idx].reshape(1,-1) )
         return np.concatenate(out, axis=0)
@@ -227,7 +233,7 @@ class wave():
         self.u_past.vector().set_local( self.init_u )
         self.v_past.vector().set_local( self.init_v )
 
-        return self.read_boundary()
+        return self.read_boundary().flatten()
         
     def save_state(self):
         np.savez('stat2.npz', u_past_np=self.u_past.vector().get_local(), v_past_np=self.v_past.vector().get_local())
@@ -239,6 +245,10 @@ class wave():
 
         self.u_past.vector().set_local( u_past )
         self.v_past.vector().set_local( v_past )
+
+    def plot_wave_speed(self):
+        plot( self.c )
+
 if __name__ == '__main__':
     problem = wave()
 

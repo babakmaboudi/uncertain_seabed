@@ -2,3 +2,5 @@ solution
 __pycache__
 *.pdf
 .DS_Store
+stat
+obs
