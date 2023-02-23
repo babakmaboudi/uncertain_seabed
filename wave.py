@@ -77,43 +77,55 @@ class wave_speed_matern(UserExpression):
         return self.var*self.field.assemble(p)
 
     def eval(self, values, x):
-        temp = (x[0] - self.x_grid)>0
-        loc = ( temp[:-1] )*( ~temp[1:] )
-        idx = np.argwhere(loc==True).item()
-        x1 = self.x_grid[idx]
-        y1 = self.curve[idx]
-        x2 = self.x_grid[idx+1]
-        y2 = self.curve[idx+1]
+        if(x[0] < -2):
+            if( x[1] > self.curve[0] ):
+                values[0] = 1.5
+            else:
+                values[0] = 6.4
+        elif(x[0] > 2):
+            if( x[1] > self.curve[-1] ):
+                values[0] = 1.5
+            else:
+                values[0] = 6.4
 
-        y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
-        if( x[1]>y ):
-            values[0] = 1.5
         else:
-            values[0] = 6.4
+            temp = (x[0] - self.x_grid)>0
+            loc = ( temp[:-1] )*( ~temp[1:] )
+            idx = np.argwhere(loc==True).item()
+            x1 = self.x_grid[idx]
+            y1 = self.curve[idx]
+            x2 = self.x_grid[idx+1]
+            y2 = self.curve[idx+1]
+
+            y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
+            if( x[1]>y ):
+                values[0] = 1.5
+            else:
+                values[0] = 6.4
 
 class wave():
     def __init__(self):
         # defining the mesh
         #self.mesh = UnitSquareMesh(100,100)
-        #domain = mshr.Rectangle(Point(-2,-1.5), Point(2,1.5))
+        #domain = mshr.Rectangle(Point(-3,-1.5), Point(3,1.5))
         #self.mesh = mshr.generate_mesh(domain, 60)
-        #mesh_file = File('./model_params/mesh_fine.xml')
+        #mesh_file = File('./model_params/mesh_extended.xml')
         #mesh_file << self.mesh
-        self.mesh = Mesh('./model_params/mesh.xml')
+        self.mesh = Mesh('./model_params/mesh_extended.xml')
 
         # defining the function space
         self.V = FunctionSpace(self.mesh,'CG', 1)
 
         FEM_el = self.V.ufl_element()
-        data = np.load('./model_params/state.npz')
+        data = np.load('./model_params/state_extended.npz')
         self.init_u = data['u_past_np']
         self.init_v = data['v_past_np']
 
         # extracting the indecies of the solution at the top boundary
         self.compute_boundary_indecies()
 
-        #self.source = source_term(element=FEM_el)
-        #self.source_func = Function(self.V)
+        self.source = source_term(element=FEM_el)
+        self.source_func = Function(self.V)
 
         self.dt = 0.005
 
@@ -189,11 +201,11 @@ class wave():
         path = './solution/sol.pvd'
         file = File(path)
 
-        #t = 0
-        for i in progressbar( range(600) ):
+        t = 0
+        for i in progressbar( range(800) ):
             self.stormer_verlet_step()
-        #    t += self.dt
-        #    self.source.t = t
+            #t += self.dt
+            #self.source.t = t
             if( np.mod(i,10) == 0 ):
                 file << (self.u_past, i*self.dt)
 
@@ -227,7 +239,6 @@ class wave():
 
         self.bnd_idx = self.bnd_idx[sorted_idx]
 
-
     def forward(self, p):
         self.compute_wave_speed(p)
         self.u_past.vector().set_local( self.init_u )
@@ -236,10 +247,14 @@ class wave():
         return self.read_boundary().flatten()
         
     def save_state(self):
-        np.savez('stat2.npz', u_past_np=self.u_past.vector().get_local(), v_past_np=self.v_past.vector().get_local())
+        np.savez('./model_params/stat_extended.npz', u_past_np=self.u_past.vector().get_local(), v_past_np=self.v_past.vector().get_local())
+
+    def save_wave_speed(self):
+        file = File('speed.pvd')
+        file << self.c
 
     def load_state(self):
-        data = np.load('./model_params/state.npz')
+        data = np.load('./model_params/state_extended.npz')
         u_past = data['u_past_np']
         v_past = data['v_past_np']
 
@@ -251,28 +266,8 @@ class wave():
 
 if __name__ == '__main__':
     problem = wave()
-
-    # p is the parameters defining the random seabed curve
     p = np.random.standard_normal(64)
-    temp1 = problem.forward(p)
-    plt.figure()
-    plt.imshow(temp1)
-    plt.colorbar()
-    plt.savefig('fig1.pdf',format='pdf',dpi=300)
-
-    p = np.random.standard_normal(64)
-    temp2 = problem.forward(p)
-    plt.figure()
-    plt.imshow(temp2)
-    plt.colorbar()
-    plt.savefig('fig2.pdf',format='pdf',dpi=300)
-
-    plt.figure()
-    plt.imshow( np.abs( temp2 - temp1 ) )
-    plt.colorbar()
-    plt.savefig('fig3.pdf',format='pdf',dpi=300)
-    #problem.compute_wave_speed(p)
-    
-    #problem.time_stepping()
-    #problem.save_state()
-    #problem.forward(p)
+    problem.compute_wave_speed(p)
+    problem.save_wave_speed()
+    problem.load_state()
+    problem.time_stepping()
