@@ -3,7 +3,7 @@ import scipy.linalg as linalg
 import matplotlib.pyplot as plt
 
 class matern():
-    def __init__(self, N, num_terms = 64,L=1, delta = 1/0.01/0.01, s=0.5):
+    def __init__(self, N, num_terms = 64,L=1, delta = 1/0.008/0.008, s=0.5):
         dx = L/N
         diag1 = -2*np.ones(N)
         diag2 = np.ones(N-1)

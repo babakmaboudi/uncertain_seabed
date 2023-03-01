@@ -64,9 +64,9 @@ class source_term(UserExpression):
 class wave_speed_matern(UserExpression):
     def __init__(self, N_x, N_kl, **kwargs):
         self.field = matern(N_x, num_terms=N_kl,s=6)
-        self.x_grid = np.linspace(-2.001,2.001,N_x)
+        self.x_grid = np.linspace(-3.001,3.001,N_x)
         self.curve = np.zeros(N_x)
-        self.var = 2
+        self.var = 3
 
         super().__init__(**kwargs)
 
@@ -77,31 +77,19 @@ class wave_speed_matern(UserExpression):
         return self.var*self.field.assemble(p)
 
     def eval(self, values, x):
-        if(x[0] < -2):
-            if( x[1] > self.curve[0] ):
-                values[0] = 1.5
-            else:
-                values[0] = 6.4
-        elif(x[0] > 2):
-            if( x[1] > self.curve[-1] ):
-                values[0] = 1.5
-            else:
-                values[0] = 6.4
+        temp = (x[0] - self.x_grid)>0
+        loc = ( temp[:-1] )*( ~temp[1:] )
+        idx = np.argwhere(loc==True).item()
+        x1 = self.x_grid[idx]
+        y1 = self.curve[idx]
+        x2 = self.x_grid[idx+1]
+        y2 = self.curve[idx+1]
 
+        y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
+        if( x[1]>y ):
+            values[0] = 1.5
         else:
-            temp = (x[0] - self.x_grid)>0
-            loc = ( temp[:-1] )*( ~temp[1:] )
-            idx = np.argwhere(loc==True).item()
-            x1 = self.x_grid[idx]
-            y1 = self.curve[idx]
-            x2 = self.x_grid[idx+1]
-            y2 = self.curve[idx+1]
-
-            y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
-            if( x[1]>y ):
-                values[0] = 1.5
-            else:
-                values[0] = 6.4
+            values[0] = 6.4
 
 class wave():
     def __init__(self):
@@ -136,7 +124,7 @@ class wave():
         self.v = TrialFunction(self.V)
 
         # defining the seabed curve
-        N_x = 256
+        N_x = 384
         N_kl = 64
         self.speed_function = wave_speed_matern(N_x,N_kl,element=FEM_el)
         self.c = Function(self.V)
@@ -214,7 +202,7 @@ class wave():
         self.solver = LUSolver(A)
 
         out = []
-        for i in range(600):
+        for i in range(700):
             self.stormer_verlet_step()
             out.append( self.u_past.vector().get_local()[self.bnd_idx].reshape(1,-1) )
         return np.concatenate(out, axis=0)
@@ -269,5 +257,7 @@ if __name__ == '__main__':
     p = np.random.standard_normal(64)
     problem.compute_wave_speed(p)
     problem.save_wave_speed()
+
+    exit()
     problem.load_state()
     problem.time_stepping()

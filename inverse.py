@@ -20,7 +20,7 @@ class wave_speed_matern():
 
     def plot_curve(self, p, ax, label=None, color=None):
         u = self.var*self.field.assemble(p)
-        x = np.linspace( -2,2, len(u) )
+        x = np.linspace( -3,3, len(u) )
         ax.plot(x,u,label=label, color=color)
         ax.set_aspect('equal')
         ax.set_xlim([-2,2])
@@ -38,7 +38,7 @@ class wave_speed_matern():
             hdi_intervals.append( local_interval.reshape(-1) )
         hdi_intervals = np.array(hdi_intervals)
 
-        x = np.linspace( -2,2, len(u[0]) )
+        x = np.linspace( -3,3, len(u[0]) )
         ax.fill_between(x, hdi_intervals[:,0], hdi_intervals[:,1], alpha=0.5,color=color, label=label)
 
 def save_obs():
@@ -63,14 +63,14 @@ def save_obs():
     obs = obs_true + 0.2*np.linalg.norm( obs_true.flatten() )*noise_vec
     plt.imshow( obs.reshape(-1,81) )
 
-    plt.savefig('./obs/fig_extended.pdf',format='pdf',dpi=300)
+    plt.savefig('./obs/fig_extended_natural.pdf',format='pdf',dpi=300)
 
-    np.savez('./obs/obs_extended.npz', param_dim=param_dim, obs_true=obs_true, noise_vec=noise_vec, param_true=p )
+    np.savez('./obs/obs_extended_natural.npz', param_dim=param_dim, obs_true=obs_true, noise_vec=noise_vec, param_true=p )
 
 
 def run_pCN():
     print('loading observation data ...')
-    obs_data = np.load('./obs/obs_extended.npz')
+    obs_data = np.load('./obs/obs_extended_natural.npz')
     y_true = obs_data['obs_true'].flatten()
     noise_vec = obs_data['noise_vec'].flatten()
     N = obs_data['param_dim']
@@ -90,21 +90,21 @@ def run_pCN():
 
     P = JointDistribution(p,y)
     posterior = P(y=y_obs)
-    sampler = pCN(posterior,x0=np.zeros(N))
+    sampler = pCN(posterior,x0=np.zeros(N),scale = 0.1)
 
     print('sampling ...')
-    samples = sampler.sample_adapt(5000)
+    samples = sampler.sample(5000)
 
-    np.savez( './stat/stat_extended.npz', samples=samples.samples)
+    np.savez( './stat/stat_extended_natural.npz', samples=samples.samples)
 
 def post_process():
-    obs_data = np.load('./obs/obs_extended.npz')
+    obs_data = np.load('./obs/obs_extended_natural.npz')
     y_true = obs_data['obs_true'].flatten()
     noise_vec = obs_data['noise_vec'].flatten()
     N = obs_data['param_dim']
 
-    stat_data = np.load('./stat/stat_extended.npz')
-    samples = stat_data['samples'][:,3000:]
+    stat_data = np.load('./stat/stat_extended_natural.npz')
+    samples = stat_data['samples']#[:,3000:]
     print(samples.shape)
 
     mean = np.mean(samples,axis = 1)
@@ -126,15 +126,15 @@ def post_process():
     plt.savefig('fig.pdf',format='pdf',dpi=300)
 
 def post_process_curve():
-    obs_data = np.load('./obs/obs_extended.npz')
+    obs_data = np.load('./obs/obs_extended_natural.npz')
     y_true = obs_data['obs_true'].flatten()
     noise_vec = obs_data['noise_vec'].flatten()
     N = obs_data['param_dim']
     param_true = obs_data['param_true']
 
-    stat_data = np.load('./stat/stat_extended.npz')
+    stat_data = np.load('./stat/stat_extended_natural.npz')
     samples = stat_data['samples'].T
-    samples = samples[1:,:]
+    samples = samples[2000:,:]
 
     speed_function = wave_speed_matern(256,64)
     
@@ -156,5 +156,5 @@ def post_process_curve():
 if __name__ == '__main__':
 #    save_obs()
 #    run_pCN()  
-#    post_process()
-    post_process_curve()
+    post_process()
+#    post_process_curve()
