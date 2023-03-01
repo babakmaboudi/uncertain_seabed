@@ -156,5 +156,5 @@ def post_process_curve():
 if __name__ == '__main__':
 #    save_obs()
 #    run_pCN()  
-    post_process()
-#    post_process_curve()
+#    post_process()
+    post_process_curve()
