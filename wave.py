@@ -63,7 +63,7 @@ class source_term(UserExpression):
 
 class wave_speed_matern(UserExpression):
     def __init__(self, N_x, N_kl, **kwargs):
-        self.field = matern(N_x, num_terms=N_kl,s=6)
+        self.field = matern(N_x, num_terms=N_kl,s=1)
         self.x_grid = np.linspace(-2.001,2.001,N_x)
         self.curve = np.zeros(N_x)
         self.var = 2

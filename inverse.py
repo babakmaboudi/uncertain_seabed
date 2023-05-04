@@ -63,14 +63,14 @@ def save_obs():
     obs = obs_true + 0.2*np.linalg.norm( obs_true.flatten() )*noise_vec
     plt.imshow( obs.reshape(-1,81) )
 
-    plt.savefig('./obs/fig_extended.pdf',format='pdf',dpi=300)
+    plt.savefig('./obs/fig_extended2.pdf',format='pdf',dpi=300)
 
-    np.savez('./obs/obs_extended.npz', param_dim=param_dim, obs_true=obs_true, noise_vec=noise_vec, param_true=p )
+    np.savez('./obs/obs_extended2.npz', param_dim=param_dim, obs_true=obs_true, noise_vec=noise_vec, param_true=p )
 
 
 def run_pCN():
     print('loading observation data ...')
-    obs_data = np.load('./obs/obs_extended.npz')
+    obs_data = np.load('./obs/obs_extended2.npz')
     y_true = obs_data['obs_true'].flatten()
     noise_vec = obs_data['noise_vec'].flatten()
     N = obs_data['param_dim']
@@ -95,15 +95,15 @@ def run_pCN():
     print('sampling ...')
     samples = sampler.sample_adapt(5000)
 
-    np.savez( './stat/stat_extended.npz', samples=samples.samples)
+    np.savez( './stat/stat_extended2.npz', samples=samples.samples)
 
 def post_process():
-    obs_data = np.load('./obs/obs_extended.npz')
+    obs_data = np.load('./obs/obs_extended2.npz')
     y_true = obs_data['obs_true'].flatten()
     noise_vec = obs_data['noise_vec'].flatten()
     N = obs_data['param_dim']
 
-    stat_data = np.load('./stat/stat_extended.npz')
+    stat_data = np.load('./stat/stat_extended2.npz')
     samples = stat_data['samples'][:,3000:]
     print(samples.shape)
 
@@ -126,15 +126,15 @@ def post_process():
     plt.savefig('fig.pdf',format='pdf',dpi=300)
 
 def post_process_curve():
-    obs_data = np.load('./obs/obs_extended.npz')
+    obs_data = np.load('./obs/obs_extended2.npz')
     y_true = obs_data['obs_true'].flatten()
     noise_vec = obs_data['noise_vec'].flatten()
     N = obs_data['param_dim']
     param_true = obs_data['param_true']
 
-    stat_data = np.load('./stat/stat_extended.npz')
+    stat_data = np.load('./stat/stat_extended2.npz')
     samples = stat_data['samples'].T
-    samples = samples[1:,:]
+    samples = samples[3000:,:]
 
     speed_function = wave_speed_matern(256,64)
     
@@ -147,7 +147,7 @@ def post_process_curve():
     speed_function.plot_curve(param_true, ax, color='orange', label='true curve')
     speed_function.plot_curve(mean, ax, label='estimated curve')
     ax.legend()
-    plt.savefig('fig1.pdf',format='pdf',dpi=300)
+    plt.savefig('fig2.pdf',format='pdf',dpi=300)
 
 
 
