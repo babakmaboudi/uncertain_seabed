@@ -1,6 +1,8 @@
 solution
+solution_png
 __pycache__
 *.pdf
 .DS_Store
 stat
 obs
+backup

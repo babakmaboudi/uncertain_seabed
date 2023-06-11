@@ -31,12 +31,12 @@ class matern():
 def plot_bottom():
     N = 256
     f, axes = plt.subplots(4,1,sharey=True)
-    prior = matern(512, num_terms=N,s=.5)
+    prior = matern(512, L=6,num_terms=N,delta=1/0.4/0.4,s=.75)
 
     for i in range(4):
         p = np.random.standard_normal(N)
         u = prior.assemble(p)
-        axes[i].plot( u )
+        axes[i].plot( 5*u )
         axes[i].set_xticks([])
 
     plt.tight_layout()
