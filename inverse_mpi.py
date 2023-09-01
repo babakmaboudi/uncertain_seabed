@@ -223,7 +223,7 @@ def post_process():
     N_x = obs_data['N_x']
     freq = obs_data['freq']
 
-    stat_data = np.load('./stat/stat_multi_source2.npz')
+    stat_data = np.load('./stat/stat_multi_source_hpc.npz')
     samples = stat_data['samples']#[:,3000:]
     print(samples.shape)
 
@@ -255,7 +255,7 @@ def post_process_curve():
     freq = obs_data['freq']
     param_true = obs_data['param_true']
 
-    stat_data = np.load('./stat/stat_multi_source2.npz')
+    stat_data = np.load('./stat/stat_multi_source_hpc.npz')
     samples = stat_data['samples'].T
     samples = samples[1000:,:]
 

@@ -186,6 +186,27 @@ class wave():
         self.a2 = self.u*self.t*dx 
         self.L2 = self.u_past*self.t*dx + self.dt*self.v_past*self.t*dx
 
+    def initiate_load_source_xdmf(self, freq):
+        self.init_u = Function( self.V )
+        self.init_v = Function( self.V )
+
+        init_path = './model_params/init_state_freq_{}.xdmf'.format(freq)
+        file = XDMFFile(init_path)
+        file.read_checkpoint(self.init_u, 'u_past', 0)
+        file.read_checkpoint(self.init_v, 'v_past', 0)
+
+        # extracting the indecies of the solution at the top boundary
+        self.compute_boundary_indecies()
+
+        self.u_past = Function( self.V )
+        self.v_past = Function( self.V )
+
+        self.a1 = self.v*self.t*dx 
+        self.L1 = self.v_past*self.t*dx - self.dt/2*self.c*inner( grad(self.u_past), grad(self.t) )*dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) #+ self.dt/2*self.source*self.t*dx
+
+        self.a2 = self.u*self.t*dx 
+        self.L2 = self.u_past*self.t*dx + self.dt*self.v_past*self.t*dx
+
 
     # projecting the wave speed function onto the FEM basis
     def compute_wave_speed(self, p):
@@ -218,15 +239,34 @@ class wave():
         self.u_past.vector().set_local( self.init_u )
         self.v_past.vector().set_local( self.init_v )
 
-        path = './solution/sol.pvd'
+        path = './solution/sol0_ref.pvd'
         file = File(path)
 
         t = 0
-        for i in progressbar( range(20) ):
+        for i in progressbar( range(2000) ):
             self.stormer_verlet_step()
             t += self.dt
-            #if( np.mod(i,10) == 0 ):
-            #    file << (self.u_past, i*self.dt)
+            if( np.mod(i,10) == 0 ):
+                file << (self.u_past, i*self.dt)
+
+    def time_stepping_xdmf(self):
+        A = assemble(self.a1)
+        self.solver = LUSolver(A)
+
+        #sol = Function(self.V)
+
+        self.u_past.vector().set_local( self.init_u.vector().get_local() )
+        self.v_past.vector().set_local( self.init_v.vector().get_local() )
+
+        path = './solution/sol0_ref.pvd'
+        file = File(path)
+
+        t = 0
+        for i in progressbar( range(2000) ):
+            self.stormer_verlet_step()
+            t += self.dt
+            if( np.mod(i,10) == 0 ):
+                file << (self.u_past, i*self.dt)
 
     def time_stepping_save_png(self):
         A = assemble(self.a1)
@@ -257,11 +297,11 @@ class wave():
         self.solver = LUSolver(A)
 
         out = []
-        for i in range(2000):
+        for i in progressbar( range(2000) ):
             self.stormer_verlet_step()
             if(i>=700):
                 out.append( self.u_past.vector().get_local()[self.bnd_idx].reshape(1,-1) )
-        return np.concatenate(out, axis=0).flatten()
+        return np.concatenate(out, axis=0)
 
     def compute_boundary_indecies(self):
         FEM_el = self.V.ufl_element()
@@ -285,8 +325,10 @@ class wave():
 
     def forward(self, p):
         self.compute_wave_speed(p)
-        self.u_past.vector().set_local( self.init_u )
-        self.v_past.vector().set_local( self.init_v )
+        #self.u_past.vector().set_local( self.init_u )
+        #self.v_past.vector().set_local( self.init_v )
+        self.u_past.assign( self.init_u )
+        self.v_past.assign( self.init_v )
 
         return self.read_boundary()
 
@@ -318,11 +360,18 @@ if __name__ == '__main__':
     N_KL=256 
     problem = wave(N_x=512, N_KL=N_KL)
     #problem.propagate_with_source(freq=100)
-    problem.initiate_load_source(100)
+    #problem.initiate_load_source(10)
+    problem.initiate_load_source_xdmf(10)
 
-    p = np.random.standard_normal(N_KL)
+    #p = np.random.standard_normal(N_KL)
+    data = np.load('png_npz_params.npz')
+    p = data['p']
     problem.compute_wave_speed( p )
-    problem.time_stepping()
+    out = problem.forward(p)
+
+    plt.imshow(out)
+    plt.savefig('obs_single.pdf')
+    #problem.time_stepping_xdmf()
     #problem.time_stepping_save_png()
     #p = np.random.standard_normal(64)
     #problem.compute_wave_speed(p)
