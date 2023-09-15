@@ -70,7 +70,7 @@ class wave_speed_matern(dl.UserExpression):
     def __init__(self, N_x, N_kl, **kwargs):
         super().__init__(**kwargs)
         self.num_terms=N_kl
-        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75)
+        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
         self.x_grid = np.linspace(-3.001,3.001,N_x)
         self.curve = np.zeros(N_x)
         self.var = 5
@@ -108,13 +108,14 @@ class wave():
         self.comm_world = comm_world
         self.local_comm = MPI.Comm.Split(comm_world,color=color, key=key)
 
+        #self.mesh = dl.RectangleMesh(self.comm_world, dl.Point(-3, -1.5), dl.Point(3, 1.5), 188, 94)
         #self.mesh = dl.Mesh(self.comm, './model_params/mesh_fine_extended.xml')
 
-        #with dl.XDMFFile(self.comm, "mesh.xdmf") as file:
+        #with dl.XDMFFile(self.comm_world, "./model_params/mesh_structured.xdmf") as file:
         #    file.write(self.mesh)
 
         self.mesh = dl.Mesh(self.local_comm)
-        with dl.XDMFFile(self.local_comm, "mesh.xdmf") as infile:
+        with dl.XDMFFile(self.local_comm, "./model_params/mesh_structured.xdmf") as infile:
             infile.read(self.mesh)
 
         # defining the function space
@@ -171,7 +172,7 @@ class wave():
         self.init_u = dl.Function( self.V )
         self.init_v = dl.Function( self.V )
 
-        init_path = './model_params/init_state_freq_{}.xdmf'.format(freq)
+        init_path = './model_params/init_state_structured_freq_{}.xdmf'.format(freq)
         file = dl.XDMFFile(self.local_comm, init_path)
         file.read_checkpoint(self.init_u, 'u_past', 0)
         file.read_checkpoint(self.init_v, 'v_past', 0)
@@ -220,7 +221,8 @@ class wave():
     def compute_wave_speed(self, p):
         self.speed_function.assemble_curve(p)
         temp = dl.interpolate(self.speed_function, self.V)
-        self.c.vector().set_local( temp.vector().get_local() )
+        #self.c.vector().set_local( temp.vector().get_local() )
+        self.c.assign(temp)
 
     # defining the second order symplectic integrator
     def stormer_verlet_step(self):
@@ -288,16 +290,16 @@ class wave():
         solver2.solve(A, self.temp.vector(), b1)
         print('CG is : {}'.format(time()-t))
 
-    def time_stepping_save_png(self, rank):
+    def time_stepping_save_png(self, color):
 #        A = dl.assemble(self.a1)
 #        self.solver = dl.LUSolver(A)
         self.A = dl.assemble(self.a1)
         self.solver = dl.KrylovSolver('cg')
 
-        self.u_past.vector().set_local( self.init_u.vector().get_local() )
-        self.v_past.vector().set_local( self.init_v.vector().get_local() )
+        self.u_past.assign(self.init_u)
+        self.v_past.assign(self.init_v)
 
-        path = './solution_png/sol{}'.format(rank)+'{:05d}.png'
+        path = './solution_png/sol{}'.format(color)+'{:05d}.png'
         f, ax = plt.subplots(1)
 
         t = 0
@@ -317,6 +319,10 @@ class wave():
     def read_boundary(self):
         self.A = dl.assemble(self.a1)
         self.solver = dl.KrylovSolver('cg')
+
+        #self.solver.parameters['absolute_tolerance'] = 1e-10
+        #self.solver.parameters['relative_tolerance'] = 1e-8
+        #self.solver.parameters['maximum_iterations'] = 1000
 
         out = []
         for i in progressbar( range(2000) ):
@@ -390,7 +396,7 @@ class wave():
         #u_past = self.u_past.vector().get_local()
         #v_past = self.v_past.vector().get_local()
 
-        path = './model_params/init_state_freq_{}.xdmf'.format(freq)
+        path = './model_params/init_state_structured_freq_{}.xdmf'.format(freq)
         #np.savez(path.format(freq), u_past_np=u_past, v_past_np=v_past, dt=self.dt, time=time, time_steps=time_steps, freq=freq, num_source=num_source)
 
         dl.plot(self.u_past)
@@ -399,13 +405,13 @@ class wave():
         file.write_checkpoint(self.u_past, 'u_past', 0, dl.XDMFFile.Encoding.HDF5, True)
         file.write_checkpoint(self.v_past, 'v_past', 0, dl.XDMFFile.Encoding.HDF5, True)
 
-    def load_state(self):
-        data = np.load('./model_params/state_extended.npz')
-        u_past = data['u_past_np']
-        v_past = data['v_past_np']
-
-        self.u_past.vector().set_local( u_past )
-        self.v_past.vector().set_local( v_past )
+#    def load_state(self):
+#        data = np.load('./model_params/state_extended.npz')
+#        u_past = data['u_past_np']
+#        v_past = data['v_past_np']
+#
+#        self.u_past.vector().set_local( u_past )
+#        self.v_past.vector().set_local( v_past )
 
     def compute_boundary_indecies(self):
         FEM_el = self.V.ufl_element()
@@ -463,10 +469,17 @@ class wave():
         dl.plot( self.c )
 
 def script_save_init_state():
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
     N_x=1024
     N_KL=256
     fmT = 100
-    problem = wave(N_x=512, N_KL=N_KL)
+    dist_column_width = 5
+    color = int( rank/dist_column_width )
+    key = rank%dist_column_width
+
+    problem = wave(N_x=512, N_KL=N_KL, comm_world=comm, color=color, key=key)
     #problem.initiate_load_source(100)
     p = np.empty(N_KL)
     problem.compute_wave_speed(p)
@@ -479,8 +492,13 @@ def script_save_png():
     N_x=1024
     N_KL=256
     fmT = np.array( [10, 25, 50, 75, 100] )
-    problem = wave(N_x=512, N_KL=N_KL)
-    problem.initiate_load_source(fmT[rank])
+
+    dist_column_width = 2
+    color = int( rank/dist_column_width )
+    key = rank%dist_column_width
+
+    problem = wave(N_x=512, N_KL=N_KL, comm_world=comm, color=color, key=key)
+    problem.initiate_load_source(fmT[color])
     if rank == 0:
         p = np.random.standard_normal(N_KL)
     else:
@@ -488,7 +506,7 @@ def script_save_png():
 
     comm.Bcast(p, root=0)
     problem.compute_wave_speed(p)
-    problem.time_stepping_save_png(rank)
+    problem.time_stepping_save_png(color)
 
 def script_save_png_npz_params():
     comm = MPI.COMM_WORLD
@@ -539,9 +557,59 @@ def script_save_png_npz_params():
     else:
         obs_all = None
 
+def test_parallel():
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    N_x=1024
+    N_KL=256
+    fmT = np.array( [10, 25, 50, 75, 100] )
 
+    dist_column_width = 2
+    color = int( rank/dist_column_width )
+    key = rank%dist_column_width
+
+    p_list = []
+    for i in range(comm.Get_size()):
+        if( i%dist_column_width != 0 ):
+            p_list.append(i)
+
+    process_group_collect = comm.group.Excl(p_list)
+    comm_collect = comm.Create_group(process_group_collect)
+
+    problem = wave(N_x=512, N_KL=N_KL, comm_world=comm, color=color, key=key)
+    problem.initiate_load_source(fmT[color])
+
+    #p = p = np.random.standard_normal(N_KL)
+    #np.savez('png_npz_params.npz', p = p)
+
+    if rank == 0:
+        data = np.load('./model_params/png_npz_params.npz')
+        p = data['p']
+        #p = np.random.standard_normal(N_KL)
+    else:
+        p = np.empty(N_KL)
+
+    comm.Bcast(p, root=0)
+    obs = problem.forward(p)
+
+    if(key == 0):
+        num_obs = int( comm.Get_size()/dist_column_width)
+        rcv_bf = np.empty([num_obs, obs.shape[0]*obs.shape[1]])
+        comm_collect.Gather(obs.reshape(-1), rcv_bf, root=0)
+        
+    if(comm.Get_rank() == 0):
+        obs_all = rcv_bf
+
+        for idx, freq in enumerate(fmT):
+            f,ax = plt.subplots(1)
+            ax.imshow( obs_all[idx].reshape(obs.shape[0],obs.shape[1]) )
+            plt.savefig('./solution_ref/obs_parallel_freq_{}.pdf'.format(freq))
+            np.savez('./solution_ref/parallel_freq_{}.npz'.format(freq), obs=obs_all[idx])
+    else:
+        obs_all = None
 if __name__ == '__main__':
+    test_parallel()
     #script_save_init_state()
     #script_save_png()
-    script_save_png_npz_params()
+    #script_save_png_npz_params()
     #test_mpi()

@@ -3,27 +3,36 @@ import scipy.linalg as linalg
 import matplotlib.pyplot as plt
 
 class matern():
-    def __init__(self, N, num_terms = 64,L=1, delta = 1/0.008/0.008, s=0.5):
-        dx = L/N
-        diag1 = -2*np.ones(N)
-        diag2 = np.ones(N-1)
+    def __init__(self, N, num_terms = 64,L=1, delta = 1/0.008/0.008, s=0.5, load_basis=False, save_basis=False):
+        if(load_basis==False):
+            dx = L/N
+            diag1 = -2*np.ones(N)
+            diag2 = np.ones(N-1)
 
-        Dxx = np.diag(diag1) + np.diag(diag2,1) + np.diag(diag2,-1)
-        Dxx[0,0] = -1
-        Dxx[-1,-1] = -1
-        Dxx /= dx**2
+            Dxx = np.diag(diag1) + np.diag(diag2,1) + np.diag(diag2,-1)
+            Dxx[0,0] = -1
+            Dxx[-1,-1] = -1
+            Dxx /= dx**2
 
-        M = delta*np.eye(N) - Dxx
-        eig_vals, eig_vecs = linalg.eig(M)
+            M = delta*np.eye(N) - Dxx
+            eig_vals, eig_vecs = linalg.eig(M)
 
-        eig_vals = np.real( eig_vals )
-        idx = np.argsort( eig_vals )
+            eig_vals = np.real( eig_vals )
+            idx = np.argsort( eig_vals )
 
-        self.weights = np.float_power( eig_vals[ idx ] , -(s+0.5) )
-        self.weights = self.weights[1:num_terms+1]
-        self.weights /= np.linalg.norm( self.weights ) 
-        self.eig_vecs = eig_vecs[:, idx ]
-        self.eig_vecs = self.eig_vecs[:, 1:num_terms+1]
+            self.weights = np.float_power( eig_vals[ idx ] , -(s+0.5) )
+            self.weights = self.weights[1:num_terms+1]
+            self.weights /= np.linalg.norm( self.weights ) 
+            self.eig_vecs = eig_vecs[:, idx ]
+            self.eig_vecs = self.eig_vecs[:, 1:num_terms+1]
+
+            if(save_basis==True):
+                np.savez('./model_params/matern_basis.npz', weights=self.weights, eig_vecs=self.eig_vecs)
+
+        else:
+            matern_data = np.load('./model_params/matern_basis.npz')
+            self.weights = matern_data['weights']
+            self.eig_vecs = matern_data['eig_vecs']
 
     def assemble(self,p):
         return self.eig_vecs@( self.weights*p )

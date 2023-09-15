@@ -70,7 +70,8 @@ class wave_speed_matern(UserExpression):
     def __init__(self, N_x, N_kl, **kwargs):
         super().__init__(**kwargs)
         self.num_terms=N_kl
-        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75)
+        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,save_basis=True)
+        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
         self.x_grid = np.linspace(-3.001,3.001,N_x)
         self.curve = np.zeros(N_x)
         self.var = 5
@@ -98,13 +99,18 @@ class wave_speed_matern(UserExpression):
 
 class wave():
     def __init__(self, N_x=256, N_KL=64):
-        # defining the mesh
-        #self.mesh = UnitSquareMesh(100,100)
-        #domain = mshr.Rectangle(Point(-3,-1.5), Point(3,1.5))
-        #self.mesh = mshr.generate_mesh(domain, 120)
-        #mesh_file = File('./model_params/mesh_fine_extended.xml')
-        #mesh_file << self.mesh
-        self.mesh = Mesh('./model_params/mesh_fine_extended.xml')
+        #self.mesh = Mesh('./model_params/mesh_fine_extended.xml')
+
+        #self.mesh = RectangleMesh(Point(-3, -1.5), Point(3, 1.5), 188, 94)
+        #with XDMFFile("./model_params/mesh_structured.xdmf") as file:
+        #    file.write(self.mesh)
+
+        #print('mesh saved')
+        #exit()
+
+        self.mesh = Mesh()
+        with XDMFFile("./model_params/mesh_structured.xdmf") as infile:
+            infile.read(self.mesh)
 
         # defining the function space
         self.V = FunctionSpace(self.mesh,'CG', 1)
@@ -169,7 +175,7 @@ class wave():
 
     def initiate_load_source(self, freq):
         # loading initial condition
-        init_path = './model_params/init_state_freq_{}.npz'.format(freq)
+        init_path = './model_params/init_state_structured_freq_{}.npz'.format(freq)
         data = np.load(init_path)
         self.init_u = data['u_past_np']
         self.init_v = data['v_past_np']
@@ -190,7 +196,7 @@ class wave():
         self.init_u = Function( self.V )
         self.init_v = Function( self.V )
 
-        init_path = './model_params/init_state_freq_{}.xdmf'.format(freq)
+        init_path = './model_params/init_state_structured_freq_{}.xdmf'.format(freq)
         file = XDMFFile(init_path)
         file.read_checkpoint(self.init_u, 'u_past', 0)
         file.read_checkpoint(self.init_v, 'v_past', 0)
@@ -255,10 +261,12 @@ class wave():
 
         #sol = Function(self.V)
 
-        self.u_past.vector().set_local( self.init_u.vector().get_local() )
-        self.v_past.vector().set_local( self.init_v.vector().get_local() )
+        #self.u_past.vector().set_local( self.init_u.vector().get_local() )
+        #self.v_past.vector().set_local( self.init_v.vector().get_local() )
+        self.u_past.assign( self.init_u )
+        self.v_past.assign( self.init_v )
 
-        path = './solution/sol0_ref.pvd'
+        path = './solution/sol4_ref.pvd'
         file = File(path)
 
         t = 0
@@ -340,7 +348,7 @@ class wave():
         u_past = self.u_past.vector().get_local()
         v_past = self.v_past.vector().get_local()
 
-        path = './model_params/init_state_freq_{}.npz'
+        path = './model_params/init_state_structured_freq_{}.npz'
         np.savez(path.format(freq), u_past_np=u_past, v_past_np=v_past, dt=self.dt, time=time, time_steps=time_steps, freq=freq, num_source=num_source)
 
 
@@ -355,16 +363,53 @@ class wave():
     def plot_wave_speed(self):
         plot( self.c )
 
-if __name__ == '__main__':
+def save_ref_solution():
+    N_x=1024
+    N_KL=256 
+
+    fmT = np.array( [10, 25, 50, 75, 100] )
+    obs = []
+    for freq in fmT:
+        problem = wave(N_x=512, N_KL=N_KL)
+        problem.initiate_load_source_xdmf(freq)
+        data = np.load('./model_params/png_npz_params.npz')
+        p = data['p']
+        problem.compute_wave_speed( p )
+
+        out = problem.forward(p)
+
+        f, ax = plt.subplots(1)
+        ax.imshow(out)
+        ax.set_xlabel('x')
+        ax.set_ylabel('time')
+        plt.savefig('./solution_ref/obs_freq_{}.pdf'.format(freq), format='pdf', dpi=300)
+
+        np.savez('./solution_ref/sol_freq_{}.npz'.format(freq), obs=out)
+
+def save_solution():
+    N_x=1024
+    N_KL=256 
+
+    fmT = 100
+    problem = wave(N_x=512, N_KL=N_KL)
+    problem.initiate_load_source_xdmf(fmT)
+    data = np.load('./model_params/png_npz_params.npz')
+    p = data['p']
+    problem.compute_wave_speed( p )
+    problem.time_stepping_xdmf()
+
+
+def script():
     N_x=1024
     N_KL=256 
     problem = wave(N_x=512, N_KL=N_KL)
     #problem.propagate_with_source(freq=100)
     #problem.initiate_load_source(10)
+
     problem.initiate_load_source_xdmf(10)
 
     #p = np.random.standard_normal(N_KL)
-    data = np.load('png_npz_params.npz')
+    data = np.load('./model_params/png_npz_params.npz')
     p = data['p']
     problem.compute_wave_speed( p )
     out = problem.forward(p)
@@ -380,3 +425,9 @@ if __name__ == '__main__':
     #exit()
     #problem.load_state()
     #problem.time_stepping()
+
+
+
+if __name__ == '__main__':
+    save_ref_solution()
+    #save_solution()

@@ -1,5 +1,6 @@
 solution
 solution_png
+solution_ref
 __pycache__
 *.pdf
 .DS_Store
