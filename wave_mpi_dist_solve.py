@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from matern import matern
 import dolfin as dl
 from mpi4py import MPI
-from progressbar import progressbar
 
 from time import time
 
@@ -98,22 +97,17 @@ class wave_speed_matern(dl.UserExpression):
 
 class wave():
     def __init__(self, N_x=256, N_KL=64, comm_world=None, color=0, key=0):
-        # defining the mesh
-        #self.mesh = UnitSquareMesh(100,100)
-        #domain = mshr.Rectangle(Point(-3,-1.5), Point(3,1.5))
-        #self.mesh = mshr.generate_mesh(domain, 120)
-
-        #mesh_file = File('./model_params/mesh_fine_extended.xml')
-        #mesh_file << self.mesh
         self.comm_world = comm_world
         self.local_comm = MPI.Comm.Split(comm_world,color=color, key=key)
 
+        # uncomment to save the mesh
         #self.mesh = dl.RectangleMesh(self.comm_world, dl.Point(-3, -1.5), dl.Point(3, 1.5), 188, 94)
         #self.mesh = dl.Mesh(self.comm, './model_params/mesh_fine_extended.xml')
 
         #with dl.XDMFFile(self.comm_world, "./model_params/mesh_structured.xdmf") as file:
         #    file.write(self.mesh)
 
+        # uncomment to load mesh from file
         self.mesh = dl.Mesh(self.local_comm)
         with dl.XDMFFile(self.local_comm, "./model_params/mesh_structured.xdmf") as infile:
             infile.read(self.mesh)
@@ -150,25 +144,20 @@ class wave():
 
         self.temp = dl.Function(self.V)
 
+    # this function initializes wave equation with a source term and zero initial condition
     def initiate_zero_init(self, freq):
         self.source = source_term(element=self.FEM_el, fmT=freq)
 
         self.u_past = dl.Function( self.V )
         self.v_past = dl.Function( self.V )
 
-        self.a1 = self.v*self.t*dl.dx 
-        self.L1 = self.v_past*self.t*dl.dx - self.dt/2*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) + self.dt/2*self.source*self.t*dl.dx
+        # weak form for the velocity equation
+        self.a = self.v*self.t*dl.dx 
+        self.L = self.v_past*self.t*dl.dx - self.dt/2*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) + self.dt/2*self.source*self.t*dl.dx
 
-        self.a2 = self.u*self.t*dl.dx 
-        self.L2 = self.u_past*self.t*dl.dx + self.dt*self.v_past*self.t*dl.dx
-
+    # this function initializes wave equation with an initial condition and no source term
     def initiate_load_source(self, freq):
-        # loading initial condition
-        #init_path = './model_params/init_state_freq_{}.npz'.format(freq)
-        #data = np.load(init_path)
-        #self.init_u = data['u_past_np']
-        #self.init_v = data['v_past_np']
-
+        # functions to hold the initial conditions (pressure and velocity)
         self.init_u = dl.Function( self.V )
         self.init_v = dl.Function( self.V )
 
@@ -177,38 +166,30 @@ class wave():
         file.read_checkpoint(self.init_u, 'u_past', 0)
         file.read_checkpoint(self.init_v, 'v_past', 0)
 
-        self.compute_boundary_indecies()
-
-        #dl.plot(self.init_u)
-        #file = dl.File('plot_{}.pvd'.format(freq))
-        #file << self.init_u
-        #plt.savefig('plot_{}.pdf'.format(freq),format='pdf')
-        #print('done')
-        #exit()
-
         # extracting the indecies of the solution at the top boundary
         self.compute_boundary_indecies()
 
         self.u_past = dl.Function( self.V )
         self.v_past = dl.Function( self.V )
 
-        self.a1 = self.v*self.t*dl.dx 
-        self.L1 = self.v_past*self.t*dl.dx - self.dt/2*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) #+ self.dt/2*self.source*self.t*dx
+        # weak form for the velocity equation
+        self.a = self.v*self.t*dl.dx 
+        self.L = self.v_past*self.t*dl.dx - self.dt/2*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) #+ self.dt/2*self.source*self.t*dx
 
-        self.a2 = self.u*self.t*dl.dx 
-        self.L2 = self.u_past*self.t*dl.dx + self.dt*self.v_past*self.t*dl.dx
-
+    # this function computes and saves a state with the source term
     def save_initial_state(self):
-        self.A = dl.assemble(self.a1)
-        #self.solver = dl.LUSolver()
+        self.A = dl.assemble(self.a)
+        # defining conjugate gradient iterations for solving systems
         self.solver = dl.KrylovSolver('cg')
 
+        # path to save the solution to file
         path = './solution/sol.pvd'.format()
         file = dl.File(path)
 
         t = 0
         time_steps=75
-        for i in progressbar(range(time_steps)):
+        # time steps
+        for i in range(time_steps):
             self.source.t = t
             self.stormer_verlet_step()
             t += self.dt
@@ -217,152 +198,71 @@ class wave():
 
         self.save_state(t, time_steps, self.source.fmT, self.source.N)
 
-    # projecting the wave speed function onto the FEM basis
+    # projecting/interpolating the wave speed function onto the FEM basis
     def compute_wave_speed(self, p):
         self.speed_function.assemble_curve(p)
         temp = dl.interpolate(self.speed_function, self.V)
-        #self.c.vector().set_local( temp.vector().get_local() )
         self.c.assign(temp)
 
-    # defining the second order symplectic integrator
+    # second order symplectic integrator (Stormer-Verlet)
     def stormer_verlet_step(self):
-        b1 = dl.assemble(self.L1)
-        #self.zero_bc.apply(b1)
-        self.solver.solve(self.A, self.temp.vector(), b1)
+        b = dl.assemble(self.L)
+        self.solver.solve(self.A, self.temp.vector(), b)
         self.v_past.assign( self.temp )
-        #self.v_past.vector().set_local( self.temp.vector().get_local() )
 
-        #temp = self.u_past.vector().get_local() + self.dt*self.v_past.vector().get_local()
-        #self.u_past.vector().set_local( temp )
         self.u_past.assign( self.u_past + self.dt*self.v_past )
 
-        b1 = dl.assemble(self.L1)
-        #self.zero_bc.apply(b1)
-        self.solver.solve(self.A, self.temp.vector(), b1)
+        b = dl.assemble(self.L)
+        self.solver.solve(self.A, self.temp.vector(), b)
         self.v_past.assign( self.temp )
-        #self.v_past.vector().set_local( self.temp.vector().get_local() )
 
-    # this subroutine  advances the PDE in time
+    # this function advances the PDE in time
     def time_stepping(self, color):
-        self.A = dl.assemble(self.a1)
+        self.A = dl.assemble(self.a)
         self.solver = dl.KrylovSolver('cg')
 
         self.u_past.assign(self.init_u)
         self.v_past.assign(self.init_v)
-
-        #self.u_past.vector().set_local( self.init_u.vector().get_local() )
-        #self.v_past.vector().set_local( self.init_v.vector().get_local() )
 
         path = './solution/sol{}_multi.pvd'.format(color)
         file = dl.File(path)
 
         t = 0
-        for i in progressbar( range(2000) ):
+        for i in range(2000):
             self.stormer_verlet_step()
             t += self.dt
             if( np.mod(i,10) == 0 ):
                 file << (self.u_past, i*self.dt)
 
-    def test_solver(self):
-        A = dl.assemble(self.a1)
-        b1 = dl.assemble(self.L1)
-
-        solver1 = dl.LUSolver(A)
-
-        t = time()
-        solver1.solve(self.temp.vector(), b1)
-        print('LU is : {}'.format(time()-t))
-        t = time()
-        solver1.solve(self.temp.vector(), b1)
-        print('LU is : {}'.format(time()-t))
-        t = time()
-        solver1.solve(self.temp.vector(), b1)
-        print('LU is : {}'.format(time()-t))
-
-        solver2 = dl.KrylovSolver('cg')
-        t=time()
-        solver2.solve(A, self.temp.vector(), b1)
-        print('CG is : {}'.format(time()-t))
-        t=time()
-        solver2.solve(A, self.temp.vector(), b1)
-        print('CG is : {}'.format(time()-t))
-        t=time()
-        solver2.solve(A, self.temp.vector(), b1)
-        print('CG is : {}'.format(time()-t))
-
-    def time_stepping_save_png(self, color):
-#        A = dl.assemble(self.a1)
-#        self.solver = dl.LUSolver(A)
-        self.A = dl.assemble(self.a1)
-        self.solver = dl.KrylovSolver('cg')
-
-        self.u_past.assign(self.init_u)
-        self.v_past.assign(self.init_v)
-
-        path = './solution_png/sol{}'.format(color)+'{:05d}.png'
-        f, ax = plt.subplots(1)
-
-        t = 0
-        idx = 0
-        for i in progressbar( range(2000) ):
-            self.stormer_verlet_step()
-
-            if( np.mod(i,2) == 0 ):
-                plt.sca(ax)
-                dl.plot(self.u_past, mode='color', vmin=0, vmax=3.6e-5)
-                ax.plot( self.speed_function.x_grid, self.speed_function.curve, color='red' )
-                plt.tight_layout()
-                plt.savefig(path.format(idx),format='png',dpi=300)
-                ax.clear()
-                idx += 1
-
+    # this function solves the wave equation and extract boundary measurements from snapshots
     def read_boundary(self):
-        self.A = dl.assemble(self.a1)
+        self.A = dl.assemble(self.a)
         self.solver = dl.KrylovSolver('cg')
 
+        # uncomment to control the accuracy of the CG method
         #self.solver.parameters['absolute_tolerance'] = 1e-10
         #self.solver.parameters['relative_tolerance'] = 1e-8
         #self.solver.parameters['maximum_iterations'] = 1000
 
         out = []
-        for i in progressbar( range(2000) ):
+        for i in range(2000):
             self.stormer_verlet_step()
             if(i>=700):
                 out.append( self.u_past.vector().get_local()[self.bnd_idx].reshape(1,-1) )
         return np.concatenate(out, axis=0)
 
-#    def compute_boundary_indecies(self):
-#        FEM_el = self.V.ufl_element()
-#        boundary = lambda x, on_boundary: on_boundary and dl.near(x[1],1.5, 1E-14)
-#        u0 = dl.Constant('0.0')
-#        zero_bc = dl.DirichletBC(self.V, u0, boundary)
-
-#        dummy = dl.Function(self.V)
-#        dummy.vector().set_local( np.ones_like( dummy.vector().get_local() ) )
-#        zero_bc.apply( dummy.vector() )
-#        self.bnd_idx = np.argwhere( dummy.vector().get_local() == 0 ).flatten()
-
-#        x_func = x_boundary(element=FEM_el)
-#        x_bnd = dl.DirichletBC(self.V, x_func, boundary)
-#        func = dl.Function(self.V)
-#        x_bnd.apply( func.vector() )
-#        x_coords = func.vector().get_local()[self.bnd_idx]
-#        sorted_idx = np.argsort(x_coords)
-
-#        self.bnd_idx = self.bnd_idx[sorted_idx]
-
+    # this function applies the forward operator p->y_obs
     def forward(self, p):
         self.compute_wave_speed(p)
         self.u_past.assign(self.init_u)
         self.v_past.assign(self.init_v)
 
         out = self.read_boundary()
-        #print('I am {} size is {},{}'.format(self.local_comm.Get_rank(), out.shape[0],out.shape[1]))
 
         num_time_steps = out.shape[0]
-        #print(self.local_comm.Get_rank(), out)
         out = out.reshape(-1)
 
+        # communicate data to the process with key=0
         if(self.local_comm.Get_rank() == 0):
             rec_buf = np.empty( num_time_steps*np.sum( self.out_size_list ), dtype='d' )
             sendcounts = num_time_steps*np.array(self.out_size_list)
@@ -382,22 +282,10 @@ class wave():
             out = np.concatenate( data, axis=1 )
             out = out[:,self.output_idx]
         return out
-            #print(rec_buf)
 
-        #if(self.local_comm.Get_rank() == 0):
-
-        #return self.read_boundary()
-
-    def save_wave_speed(self):
-        file = dl.File('speed.pvd')
-        file << self.c
-
+    # this function saves a state of the wave equation (pressure and velocity)
     def save_state(self, time, time_steps, freq, num_source):
-        #u_past = self.u_past.vector().get_local()
-        #v_past = self.v_past.vector().get_local()
-
         path = './model_params/init_state_structured_freq_{}.xdmf'.format(freq)
-        #np.savez(path.format(freq), u_past_np=u_past, v_past_np=v_past, dt=self.dt, time=time, time_steps=time_steps, freq=freq, num_source=num_source)
 
         dl.plot(self.u_past)
         plt.savefig('init.pdf',format='pdf')
@@ -405,14 +293,7 @@ class wave():
         file.write_checkpoint(self.u_past, 'u_past', 0, dl.XDMFFile.Encoding.HDF5, True)
         file.write_checkpoint(self.v_past, 'v_past', 0, dl.XDMFFile.Encoding.HDF5, True)
 
-#    def load_state(self):
-#        data = np.load('./model_params/state_extended.npz')
-#        u_past = data['u_past_np']
-#        v_past = data['v_past_np']
-#
-#        self.u_past.vector().set_local( u_past )
-#        self.v_past.vector().set_local( v_past )
-
+    # this function creates the indecies for the boundary measurement in order of x-coordinates
     def compute_boundary_indecies(self):
         FEM_el = self.V.ufl_element()
         boundary = lambda x, on_boundary: on_boundary and dl.near(x[1],1.5, 1E-14)
@@ -452,21 +333,12 @@ class wave():
             rec_buf = None
             sendcounts = None
 
-        #if(self.local_comm.Get_rank() == 0):
-        #    print(sendcounts)
-        #    print(np.array(rec_buf).shape )
-
-        #exit()
-
         self.local_comm.Gatherv(sendbuf=coords, recvbuf=(rec_buf, sendcounts), root=0)
 
         if(self.local_comm.Get_rank() == 0):
             self.output_idx = np.argsort( rec_buf )
         else:
             self.output_idx=None
-
-    def plot_wave_speed(self):
-        dl.plot( self.c )
 
 def script_save_init_state():
     comm = MPI.COMM_WORLD
@@ -485,28 +357,6 @@ def script_save_init_state():
     problem.compute_wave_speed(p)
     problem.initiate_zero_init(fmT)
     problem.save_initial_state()
-
-def script_save_png():    
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    N_x=1024
-    N_KL=256
-    fmT = np.array( [10, 25, 50, 75, 100] )
-
-    dist_column_width = 2
-    color = int( rank/dist_column_width )
-    key = rank%dist_column_width
-
-    problem = wave(N_x=512, N_KL=N_KL, comm_world=comm, color=color, key=key)
-    problem.initiate_load_source(fmT[color])
-    if rank == 0:
-        p = np.random.standard_normal(N_KL)
-    else:
-        p = np.empty(N_KL)
-
-    comm.Bcast(p, root=0)
-    problem.compute_wave_speed(p)
-    problem.time_stepping_save_png(color)
 
 def script_save_png_npz_params():
     comm = MPI.COMM_WORLD
@@ -603,7 +453,7 @@ def test_parallel():
         for idx, freq in enumerate(fmT):
             f,ax = plt.subplots(1)
             ax.imshow( obs_all[idx].reshape(obs.shape[0],obs.shape[1]) )
-            plt.savefig('./solution_ref/obs_parallel_freq_{}.pdf'.format(freq))
+            plt.savefig('./solution_ref/obs_parallel_freq_{}.pdf'.format(freq), dpi=300)
             np.savez('./solution_ref/parallel_freq_{}.npz'.format(freq), obs=obs_all[idx])
     else:
         obs_all = None
