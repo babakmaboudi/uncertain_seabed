@@ -6,6 +6,7 @@ from matern import matern
 from progressbar import progressbar
 
 from dolfin import *
+import arviz
 #import mshr
 
 set_log_level(50)
@@ -80,6 +81,29 @@ class wave_speed_matern(UserExpression):
 
     def give_curve(self, p):
         return self.var*self.field.assemble(p)
+
+    def plot_curve(self, p, ax, label=None, color=None):
+        u = self.var*self.field.assemble(p)
+        x = np.linspace( -3,3, len(u) )
+        ax.plot(x,u,label=label, color=color)
+        ax.set_aspect('equal')
+        #ax.set_xlim([-2,2])
+        ax.set_ylim([-1.5,1.5])
+
+    def plot_uq(self, sample_p, ax, label=None, color=None):
+        u = []
+        for i in range(sample_p.shape[0]):
+            u.append( self.var*self.field.assemble( sample_p[i] ) )
+        u = np.array( u )
+
+        hdi_intervals = []
+        for i in range(u.shape[1]):
+            local_interval = arviz.hdi( u[:,i], hdi_prob=.99 )
+            hdi_intervals.append( local_interval.reshape(-1) )
+        hdi_intervals = np.array(hdi_intervals)
+
+        x = np.linspace( -3,3, len(u[0]) )
+        ax.fill_between(x, hdi_intervals[:,0], hdi_intervals[:,1], alpha=0.5,color=color, label=label)
 
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
