@@ -20,19 +20,29 @@ class matern():
             eig_vals = np.real( eig_vals )
             idx = np.argsort( eig_vals )
 
-            self.weights = np.float_power( eig_vals[ idx ] , -(s+0.5) )
-            self.weights = self.weights[1:num_terms+1]
-            self.weights /= np.linalg.norm( self.weights ) 
+            self.eig_vals = eig_vals[ idx ]
+            self.eig_vals = self.eig_vals[1:num_terms+1]
+
+            self.weights = np.float_power( self.eig_vals , -(s+0.5) )
+            self.weights /= np.linalg.norm( self.weights )
+
             self.eig_vecs = eig_vecs[:, idx ]
             self.eig_vecs = self.eig_vecs[:, 1:num_terms+1]
 
             if(save_basis==True):
-                np.savez('./model_params/matern_basis.npz', weights=self.weights, eig_vecs=self.eig_vecs)
+                np.savez('./model_params/matern_basis_no_s.npz', weights=self.weights, eig_vecs=self.eig_vecs, eig_vals=self.eig_vals)
 
         else:
-            matern_data = np.load('./model_params/matern_basis.npz')
-            self.weights = matern_data['weights']
+            matern_data = np.load('./model_params/matern_basis_no_s.npz')
+            self.eig_vals = matern_data['eig_vals']
+            self.weights = np.float_power( self.eig_vals , -(s+0.5) )
+            self.weights /= np.linalg.norm( self.weights )
             self.eig_vecs = matern_data['eig_vecs']
+
+    def set_s(self, s):
+            self.weights = np.float_power( self.eig_vals , -(s+0.5) )
+            self.weights /= np.linalg.norm( self.weights )
+
 
     def assemble(self,p):
         return self.eig_vecs@( self.weights*p )

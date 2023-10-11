@@ -80,6 +80,9 @@ class wave_speed_matern(dl.UserExpression):
     def give_curve(self, p):
         return self.var*self.field.assemble(p)
 
+    def set_s(self, s):
+        self.field.set_s(s)
+
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
         loc = ( temp[:-1] )*( ~temp[1:] )
@@ -199,7 +202,8 @@ class wave():
         self.save_state(t, time_steps, self.source.fmT, self.source.N)
 
     # projecting/interpolating the wave speed function onto the FEM basis
-    def compute_wave_speed(self, p):
+    def compute_wave_speed(self, p, s):
+        self.speed_function.set_s(s)
         self.speed_function.assemble_curve(p)
         temp = dl.interpolate(self.speed_function, self.V)
         self.c.assign(temp)
@@ -252,8 +256,8 @@ class wave():
         return np.concatenate(out, axis=0)
 
     # this function applies the forward operator p->y_obs
-    def forward(self, p):
-        self.compute_wave_speed(p)
+    def forward(self, p, s=0.75):
+        self.compute_wave_speed(p, s)
         self.u_past.assign(self.init_u)
         self.v_past.assign(self.init_v)
 
@@ -432,6 +436,8 @@ def test_parallel():
     #p = p = np.random.standard_normal(N_KL)
     #np.savez('png_npz_params.npz', p = p)
 
+    s = 0.5
+
     if rank == 0:
         data = np.load('./model_params/png_npz_params.npz')
         p = data['p']
@@ -440,7 +446,7 @@ def test_parallel():
         p = np.empty(N_KL)
 
     comm.Bcast(p, root=0)
-    obs = problem.forward(p)
+    obs = problem.forward(p, s)
 
     if(key == 0):
         num_obs = int( comm.Get_size()/dist_column_width)

@@ -72,6 +72,7 @@ class wave_speed_matern(UserExpression):
         super().__init__(**kwargs)
         self.num_terms=N_kl
         self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
+        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=False, save_basis=True)
         self.x_grid = np.linspace(-3.001,3.001,N_x)
         self.curve = np.zeros(N_x)
         self.var = 5
@@ -81,6 +82,9 @@ class wave_speed_matern(UserExpression):
 
     def give_curve(self, p):
         return self.var*self.field.assemble(p)
+
+    def set_s(self, s):
+        self.field.set_s(s)
 
     def plot_curve(self, p, ax, label=None, color=None):
         u = self.var*self.field.assemble(p)
@@ -207,7 +211,8 @@ class wave():
         self.L = self.v_past*self.t*dx - self.dt/2*self.c*inner( grad(self.u_past), grad(self.t) )*dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) #+ self.dt/2*self.source*self.t*dx
 
     # projecting the wave speed function onto the FEM basis
-    def compute_wave_speed(self, p):
+    def compute_wave_speed(self, p, s):
+        self.speed_function.set_s(s)
         self.speed_function.assemble_curve(p)
         temp = interpolate(self.speed_function, self.V)
         self.c.vector().set_local( temp.vector().get_local() )
@@ -245,14 +250,13 @@ class wave():
             if( np.mod(i,10) == 0 ):
                 file << (self.u_past, i*self.dt)
 
-    def time_stepping_xdmf(self):
+    def time_stepping_xdmf(self,path='./solution/sol4_ref.pvd'):
         A = assemble(self.a)
         self.solver = LUSolver(A)
 
         self.u_past.assign( self.init_u )
         self.v_past.assign( self.init_v )
 
-        path = './solution/sol4_ref.pvd'
         file = File(path)
 
         t = 0
@@ -326,8 +330,8 @@ class wave():
 
         self.bnd_idx = self.bnd_idx[sorted_idx]
 
-    def forward(self, p):
-        self.compute_wave_speed(p)
+    def forward(self, p, s=0.75):
+        self.compute_wave_speed(p, s)
         self.u_past.assign( self.init_u )
         self.v_past.assign( self.init_v )
 
@@ -382,17 +386,16 @@ def save_ref_solution():
         problem.initiate_load_source_xdmf(freq)
         data = np.load('./model_params/png_npz_params.npz')
         p = data['p']
-        problem.compute_wave_speed( p )
 
-        out = problem.forward(p)
+        out = problem.forward(p, s=0.5)
 
         f, ax = plt.subplots(1)
         ax.imshow(out)
         ax.set_xlabel('x')
         ax.set_ylabel('time')
-        plt.savefig('./solution_ref/obs_freq_{}.pdf'.format(freq), format='pdf', dpi=300)
+        plt.savefig('./solution_ref/obs_freq_s_50_{}.pdf'.format(freq), format='pdf', dpi=300)
 
-        np.savez('./solution_ref/sol_freq_{}.npz'.format(freq), obs=out)
+        np.savez('./solution_ref/sol_freq_s_50_{}.npz'.format(freq), obs=out)
 
 def save_solution():
     N_x=1024
@@ -404,7 +407,7 @@ def save_solution():
     data = np.load('./model_params/png_npz_params.npz')
     p = data['p']
     problem.compute_wave_speed( p )
-    problem.time_stepping_xdmf()
+    problem.time_stepping_xdmf(path='./solution/sol_s_ref.pvd')
 
 
 def script():
@@ -437,6 +440,6 @@ def script():
 
 
 if __name__ == '__main__':
-    #save_ref_solution()
+    save_ref_solution()
     #save_solution()
-    save_png()
+    #save_png()
