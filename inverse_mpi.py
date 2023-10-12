@@ -2,10 +2,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from wave_mpi_dist_solve import wave
 from mpi4py import MPI
+import sys
 
-import cuqi
-from cuqi.distribution import Gaussian, JointDistribution, Uniform
-from cuqi.sampler import Gibbs, MH, pCN
+from sampler import sampler
+
+#import cuqi
+#from cuqi.distribution import Gaussian, JointDistribution, Uniform
+#from cuqi.sampler import Gibbs, MH, pCN
 
 class forward_problem():
     def __init__(self, comm, rank, N_x=512, N_KL=256, fmT = np.array([10, 25, 50, 75, 100])):
@@ -34,15 +37,17 @@ class forward_problem():
         self.problem = wave(N_x=N_x, N_KL=N_KL, comm_world=self.comm_world, color=self.color, key=self.key)
         self.problem.initiate_load_source(fmT[self.color])
 
-    def forward_master(self, p, s):
-        print('master here')
+    def forward_master(self, p, s=0.75):
         message = np.zeros(self.N_KL+1)
         message[:self.N_KL] = p
         message[-1] = s
         self.comm_world.Bcast(message, root=0)
-        print(self.rank_world, p)
-        exit()
+
+        #print('in {}'.format( self.rank_world ) )
+        #sys.stdout.flush()
         obs = self.problem.forward(p, s)
+        #print('out {}'.format( self.rank_world ) )
+        #sys.stdout.flush()
 
         if(self.key == 0):
             num_obs = int( self.comm_world.Get_size()/self.process_column_width)
@@ -56,6 +61,8 @@ class forward_problem():
             #    ax.imshow( obs_all[idx].reshape(obs.shape[0],obs.shape[1]) )
             #    plt.savefig('./solution_ref/obs_forward_freq_{}.pdf'.format(freq), dpi=300)
 
+            #print('done {}'.format( self.rank_world ) )
+            #sys.stdout.flush()
             return obs_all.flatten()
 
     def forward_slave(self):
@@ -64,32 +71,37 @@ class forward_problem():
         p = message[:self.N_KL]
         s = message[-1]
 
-        print(self.rank_world, p)
-        exit()
+        #print('in {}'.format( self.rank_world ) )
+        #sys.stdout.flush()
         obs = self.problem.forward(p, s)
+        #print('out {}'.format( self.rank_world ) )
+        #sys.stdout.flush()
 
         if(self.key == 0):
             num_obs = int( self.comm_world.Get_size()/self.process_column_width)
             rcv_bf = np.empty([num_obs, obs.shape[0]*obs.shape[1]])
             self.comm_collect.Gather(obs.reshape(-1), rcv_bf, root=0)
 
-class Metro(MH):
-    def step(self, x):
-        self.x0 = x
-        self.scale = 0.4
-        return self.sample(20, ).samples[:,-1]
+        #print('done {}'.format( self.rank_world ) )
+        #sys.stdout.flush()
 
-    def _print_progress(*args, **kwargs):
-        pass
+#class Metro(MH):
+#    def step(self, x):
+#        self.x0 = x
+#        self.scale = 0.4
+#        return self.sample(20, ).samples[:,-1]
+#
+#    def _print_progress(*args, **kwargs):
+#        pass
 
-class PCN(pCN):
-    def step(self, x):
-        self.x0 = x
-        self.scale = 0.03
-        return self.sample(20).samples[:,-1]
-
-    def _print_progress(*args, **kwargs):
-        pass
+#class PCN(pCN):
+#    def step(self, x):
+#        self.x0 = x
+#        self.scale = 0.03
+#        return self.sample(20).samples[:,-1]
+#
+#    def _print_progress(*args, **kwargs):
+#        pass
 
 def test_forward():
     comm = MPI.COMM_WORLD
@@ -104,12 +116,14 @@ def test_forward():
     else:
         problem.forward_slave()
 
-def run_Gibbs():
+def run_pCN():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
     problem = forward_problem(comm, rank)
-    num_samples = 10
+
+    num_warmup = 10
+    num_samples = 40
 
     if(rank == 0):
         obs_data = np.load('./obs/obs1/obs.npz')
@@ -135,22 +149,45 @@ def run_Gibbs():
 
         np.random.seed(0)
 
-        s = Uniform(0.5,5)
-        p = Gaussian(np.zeros(N_KL) , 1)
-        y = Gaussian(problem.forward_master, cov_diag)
+        x0 = np.zeros(N_KL)
+        log_likelihood = lambda x: -0.5*np.sum( (problem.forward_master(x) - y_obs)**2/cov_diag )
 
-        joint = JointDistribution(p,s,y)
 
-        posterior = joint(y=y_obs)
+        #s = Uniform(0.5,5)
+        #p = Gaussian(np.zeros(N_KL) , 1)
+        #y = Gaussian(problem.forward_master, cov_diag)
+
+        #joint = JointDistribution(p,s,y)
+
+        #problem.forward_master(x0)
+
+        pCN = sampler(x0, log_likelihood)
+        pCN.scale = 0.05
+
+        print('warm up ...')
+        sys.stdout.flush()
+        pCN.warm_up(num_warmup, skip_len=100)
+        print('sampling ...')
+        sys.stdout.flush()
+        pCN.sample(num_samples)
+
+        samples = pCN.get_samples()
+        #pCN.save_checkpoint()
+
+        #print(pCN.get_samples())
+
+        #posterior = joint(y=y_obs)
         #sampler = pCN(posterior,x0=np.zeros(N_KL))
-        sampler = Gibbs(posterior, {'s':Metro, 'p':PCN})
+        #sampler = Gibbs(posterior, {'s':Metro, 'p':PCN})
 
-        samples = sampler.sample(num_samples)
+        #samples = sampler.sample(num_samples)
 
-        np.savez( './stat/stat_Gibbs.npz', samples=samples.samples)
+        np.savez( './stat/stat_no_cuqi.npz', samples=samples)
     else:
-        for i in range(num_samples):
+        for i in range(num_warmup + num_samples+1):
             problem.forward_slave()
+        #for i in range(num_samples):
+        #    problem.forward_slave()
 
 def run_Gibbs_load_checkpoint(check_path='./checkpoints/checkpoint1.npz'):
     comm = MPI.COMM_WORLD
@@ -242,8 +279,8 @@ def dummy():
 
 
 if __name__ == '__main__':
-    #run_Gibbs()
-    run_Gibbs_load_checkpoint()
+    run_pCN()
+    #run_Gibbs_load_checkpoint()
     #dummy()
 
 
