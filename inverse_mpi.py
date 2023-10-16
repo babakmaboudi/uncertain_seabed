@@ -4,7 +4,7 @@ from wave_mpi_dist_solve import wave
 from mpi4py import MPI
 import sys
 
-from sampler import sampler
+from sampler import sampler, Gibbs
 
 #import cuqi
 #from cuqi.distribution import Gaussian, JointDistribution, Uniform
@@ -182,19 +182,30 @@ def run_pCN():
 
         #samples = sampler.sample(num_samples)
 
-        np.savez( './stat/stat_no_cuqi.npz', samples=samples)
+        #np.savez( './stat/stat_no_cuqi.npz', samples=samples)
+
+        saving_samples = {'p':samples[0], 's': samples[1]}
+
+        with open('./stat/stat_no_cuqi.pickle', 'wb') as handle:
+            pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
     else:
         for i in range(num_warmup + num_samples+1):
             problem.forward_slave()
+        print('{} done'.format(rank))
         #for i in range(num_samples):
         #    problem.forward_slave()
 
-def run_Gibbs_load_checkpoint(check_path='./checkpoints/checkpoint1.npz'):
+def run_Gibbs():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
     problem = forward_problem(comm, rank)
-    num_samples = 100
+
+    num_warmup = 2
+    warm_up_inner = 2
+    num_samples = 2
+    samples_inner = 2
+    total_samples = 2 + 2*num_warmup*warm_up_inner + 2*num_samples*samples_inner
 
     if(rank == 0):
         obs_data = np.load('./obs/obs1/obs.npz')
@@ -220,33 +231,49 @@ def run_Gibbs_load_checkpoint(check_path='./checkpoints/checkpoint1.npz'):
 
         np.random.seed(0)
 
-        s = Uniform(0.5,5)
-        p = Gaussian(np.zeros(N_KL) , 1)
-        y = Gaussian(problem.forward_master, cov_diag)
+        inits = [ np.zeros(N_KL), np.array([1]) ]
+        log_likelihood = lambda p, s: -0.5*np.sum( (problem.forward_master(p, s) - y_obs)**2/cov_diag )
 
-        joint = JointDistribution(p,s,y)
 
-        posterior = joint(y=y_obs)
+        #s = Uniform(0.5,5)
+        #p = Gaussian(np.zeros(N_KL) , 1)
+        #y = Gaussian(problem.forward_master, cov_diag)
 
+        #joint = JointDistribution(p,s,y)
+
+        #problem.forward_master(x0)
+
+        sampler = Gibbs(inits, log_likelihood, [0.05,0.1])
+        print('warm up ...')
+        sys.stdout.flush()
+        sampler.warm_up(N_outer=num_warmup,N_inner=warm_up_inner)
+        sampler.save_checkpoint('./Gibbs_checkpoint.npz')
+        print('sampling ...')
+        sys.stdout.flush()
+        sampler.sample(N_outer=num_samples, N_inner=samples_inner)
+
+        samples = sampler.get_samples()
+        #pCN.save_checkpoint()
+
+        #print(pCN.get_samples())
+
+        #posterior = joint(y=y_obs)
         #sampler = pCN(posterior,x0=np.zeros(N_KL))
-        sampler = Gibbs(posterior, {'s':Metro, 'p':PCN})
+        #sampler = Gibbs(posterior, {'s':Metro, 'p':PCN})
 
-        checkpoint_data = np.load(check_path)
-        s0 = checkpoint_data['s0']
-        p0 = checkpoint_data['p0']
-        sampler.samplers['s'].x0 = s0
-        sampler.samplers['p'].x0 = p0
+        #samples = sampler.sample(num_samples)
 
-        print(sampler.samplers['p'].x0)
-        exit()
+        saving_samples = {'p':samples[0], 's': samples[1]}
 
-        samples = sampler.sample(num_samples)
+        with open('./stat/stat_no_cuqi.pickle', 'wb') as handle:
+            pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-        np.savez( './stat/stat_Gibbs_long_patch2.npz', samples=samples.samples)
+        #np.savez( './stat/stat_no_cuqi.npz', samples=samples)
     else:
-        pass
-        for i in range(num_samples):
+        for i in range(total_samples):
             problem.forward_slave()
+        #for i in range(num_samples):
+        #    problem.forward_slave()
 
 
 def dummy():
@@ -279,7 +306,8 @@ def dummy():
 
 
 if __name__ == '__main__':
-    run_pCN()
+    #run_pCN()
+    run_Gibbs()
     #run_Gibbs_load_checkpoint()
     #dummy()
 

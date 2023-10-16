@@ -1,5 +1,6 @@
 import numpy as np
 from wave import wave
+from wave import wave_speed_matern
 import matplotlib.pyplot as plt
 
 def save_obs():
@@ -48,7 +49,43 @@ def read_obs():
         plt.imshow(y_obs[i])
         plt.savefig('noisy_{}.pdf'.format(i),dpi=300)
 
+def plot_seabed():
+    data = np.load('./obs/obs1/obs.npz')
+    p_true = data['param_true']
+    N_x = data['N_x']
+    N_KL = data['N_KL']
+    field = wave_speed_matern(N_x,N_KL)
+
+    field.set_s(0.75)
+    f,ax = plt.subplots(1, figsize = (6,3))
+    field.plot_curve(p_true,ax, label='true seabed', color='blue')
+
+    x1 = -2 * np.ones(100)
+    x2 = 2 * np.ones(100)
+    y = np.linspace(-1.5,1.5,100)
+
+    ax.plot(x1,y,'r--')
+    ax.plot(x2,y,'r--', label='computational domain')
+    
+
+    xx = np.linspace(-3,3,186)
+    for x in xx:
+        ax.plot(x,1.5,'gx')
+    ax.plot(xx[0],1.5,'gx', label='sensor location')
+
+    ax.legend()
+
+    ax.set_xlabel('x (longitude in km)')
+    ax.set_ylabel('y (depth in km)')
+
+    plt.tight_layout()
+
+
+    plt.savefig('bottom.pdf',dpi=300)
+
+
 
 if __name__ == '__main__':
     #save_obs()
-    read_obs()
+    #read_obs()
+    plot_seabed()

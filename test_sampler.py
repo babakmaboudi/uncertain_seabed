@@ -1,4 +1,4 @@
-from sampler import sampler
+from sampler import pCN, MH
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 x0 = np.ones(2)
 target = lambda x: -0.5*(x[0]**2/0.01 + x[1]**2/10)
 
-samp = sampler(x0, target)
+samp = pCN(x0, target)
 samp.warm_up(10000, skip_len=100)
 
 samp.save_checkpoint('check.npz')
@@ -18,7 +18,7 @@ print(samp.scale)
 
 samples1 = samp.get_samples()
 
-samp2 = sampler(x0, target)
+samp2 = pCN(x0, target)
 samp2.load_checkpoint('check.npz')
 
 np.random.seed(0)
