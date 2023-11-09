@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from wave_mpi_dist_solve import wave
 from mpi4py import MPI
 import sys
+import pickle
 import os
 
 from sampler import sampler, Gibbs
@@ -21,7 +22,7 @@ class forward_problem():
         self.fmT = fmT
 
         # local communicator variables for forward processing
-        self.process_column_width = 2
+        self.process_column_width = 24
         self.color = int( self.rank_world/self.process_column_width )
         self.key = self.rank_world%self.process_column_width
 
@@ -183,16 +184,10 @@ def run_pCN():
 
         #samples = sampler.sample(num_samples)
 
-        #np.savez( './stat/stat_no_cuqi.npz', samples=samples)
-
-        saving_samples = {'p':samples[0], 's': samples[1]}
-
-        with open('./stat/stat_no_cuqi.pickle', 'wb') as handle:
-            pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        np.savez( './stat/stat_no_cuqi.npz', samples=samples)
     else:
         for i in range(num_warmup + num_samples+1):
             problem.forward_slave()
-        print('{} done'.format(rank))
         #for i in range(num_samples):
         #    problem.forward_slave()
 
@@ -203,7 +198,8 @@ def run_Gibbs():
     problem = forward_problem(comm, rank)
 
 
-    checkpoint_path = './checkpoints/Gibbs_checkpoint.pickle'
+    #checkpoint_path = './checkpoints/Gibbs_checkpoint.pickle'
+    checkpoint_path = './checkpoints/Gibbs_checkpoint_sampled_3.pickle'
 
     if( os.path.isfile(checkpoint_path) == False ):
         num_warmup = 2
@@ -212,10 +208,9 @@ def run_Gibbs():
         num_warmup = 0
         warm_up_inner = 0
 
-    num_samples = 2
-    samples_inner = 2
+    num_samples = 10
+    samples_inner = 20
     total_samples = 2 + 2*num_warmup*warm_up_inner + 2*num_samples*samples_inner
-
     if(rank == 0):
         obs_data = np.load('./obs/obs1/obs.npz')
         y_true = obs_data['obs_true'].reshape(5,-1)
@@ -239,7 +234,6 @@ def run_Gibbs():
         y_obs = np.array(y_obs).flatten()
 
         np.random.seed(0)
-
         inits = [ np.zeros(N_KL), np.array([1]) ]
         log_likelihood = lambda p, s: -0.5*np.sum( (problem.forward_master(p, s) - y_obs)**2/cov_diag )
 
@@ -268,33 +262,99 @@ def run_Gibbs():
         print('sampling ...')
         sys.stdout.flush()
         sampler.sample(N_outer=num_samples, N_inner=samples_inner)
-        sampler.save_checkpoint('./checkpoints/Gibbs_checkpoint_sampled.pickle')
+        sampler.save_checkpoint('./checkpoints/Gibbs_checkpoint_sampled_4.pickle')
 
         samples = sampler.get_samples()
-        #pCN.save_checkpoint()
-
-        #print(pCN.get_samples())
-
-        #posterior = joint(y=y_obs)
-        #sampler = pCN(posterior,x0=np.zeros(N_KL))
-        #sampler = Gibbs(posterior, {'s':Metro, 'p':PCN})
-
-        #samples = sampler.sample(num_samples)
-
         saving_samples = {'p':samples[0], 's': samples[1]}
 
-        #with open('./stat/stat_no_cuqi.pickle', 'wb') as handle:
-        #    pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        with open('./stat/stat_no_cuqi_4.pickle', 'wb') as handle:
+            pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         #np.savez( './stat/stat_no_cuqi.npz', samples=samples)
     else:
         for i in range(total_samples):
-            print(rank)
-            sys.stdout.flush()
             problem.forward_slave()
         #for i in range(num_samples):
         #    problem.forward_slave()
 
+def continue_warm_up():
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    problem = forward_problem(comm, rank)
+
+
+    #checkpoint_path = './checkpoints/Gibbs_checkpoint.pickle'
+    checkpoint_path = './checkpoints/Gibbs_checkpoint_sampled_3.pickle'
+
+    num_warmup = 10
+    warm_up_inner = 500
+
+    num_samples = 500
+    samples_inner = 20
+    total_samples = 2 + 2*num_warmup*warm_up_inner + 2*num_samples*samples_inner
+    if(rank == 0):
+        obs_data = np.load('./obs/obs1/obs.npz')
+        y_true = obs_data['obs_true'].reshape(5,-1)
+        noise_vec = obs_data['noise_vec']
+        N_KL = obs_data['N_KL']
+
+        y_true = y_true.reshape( y_true.shape[0] , -1 )
+        noise_vec = noise_vec.reshape( y_true.shape[0] , -1 )
+
+        y_norm = np.linalg.norm(y_true, axis=1)
+        sigmas = []
+        cov_diag = []
+        y_obs = []
+        for i in range( y_true.shape[0] ):
+            sigmas.append( 0.05*np.linalg.norm( y_true[i] ) )
+            cov_diag.append( sigmas[-1]**2*np.ones_like( y_true[i] ) )
+            y_obs.append( y_true[i] + sigmas[i]*noise_vec[i] )
+
+        sigmas = np.array(sigmas)
+        cov_diag = np.array(cov_diag).flatten()
+        y_obs = np.array(y_obs).flatten()
+
+        np.random.seed(0)
+        inits = [ np.zeros(N_KL), np.array([1]) ]
+        log_likelihood = lambda p, s: -0.5*np.sum( (problem.forward_master(p, s) - y_obs)**2/cov_diag )
+
+
+        #s = Uniform(0.5,5)
+        #p = Gaussian(np.zeros(N_KL) , 1)
+        #y = Gaussian(problem.forward_master, cov_diag)
+
+        #joint = JointDistribution(p,s,y)
+
+        #problem.forward_master(x0)
+
+        sampler = Gibbs(inits, log_likelihood, [0.05,0.1])
+        sampler.load_checkpoint(checkpoint_path)
+        print('sampler loaded and initiated')
+        sys.stdout.flush()
+
+        print('warm up ...')
+        sys.stdout.flush()
+        sampler.warm_up(N_outer=num_warmup,N_inner=warm_up_inner)
+        sampler.save_checkpoint('./checkpoints/Gibbs_checkpoint_sampled_3_then_warmed_up.pickle')
+
+        print('sampling ...')
+        sys.stdout.flush()
+        sampler.sample(N_outer=num_samples, N_inner=samples_inner)
+        sampler.save_checkpoint('./checkpoints/Gibbs_checkpoint_sampled_3_then_warmed_up_1.pickle')
+
+        samples = sampler.get_samples()
+        saving_samples = {'p':samples[0], 's': samples[1]}
+
+        with open('./stat/stat_no_cuqi_3_then_warmed_up_1.pickle', 'wb') as handle:
+            pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        #np.savez( './stat/stat_no_cuqi.npz', samples=samples)
+    else:
+        for i in range(total_samples):
+            problem.forward_slave()
+        #for i in range(num_samples):
+        #    problem.forward_slave()
 
 def dummy():
     comm = MPI.COMM_WORLD
@@ -327,7 +387,8 @@ def dummy():
 
 if __name__ == '__main__':
     #run_pCN()
-    run_Gibbs()
+    #run_Gibbs()
+    continue_warm_up()
     #run_Gibbs_load_checkpoint()
     #dummy()
 
