@@ -6,7 +6,7 @@ import sys
 import pickle
 import os
 
-from sampler import sampler, Gibbs
+from sampler import sampler, Gibbs, pCN
 
 #import cuqi
 #from cuqi.distribution import Gaussian, JointDistribution, Uniform
@@ -127,6 +127,8 @@ def run_pCN():
     num_warmup = 10
     num_samples = 40
 
+    checkpoint_path = './checkpoints/pCN_checkpoint_elastic_density_{}.npz'
+
     if(rank == 0):
         obs_data = np.load('./obs/obs1/obs.npz')
         y_true = obs_data['obs_true'].reshape(5,-1)
@@ -163,17 +165,21 @@ def run_pCN():
 
         #problem.forward_master(x0)
 
-        pCN = sampler(x0, log_likelihood)
-        pCN.scale = 0.05
+        pCN_sampler = pCN(x0, log_likelihood)
+        #pCN_sampler.scale = 0.05
 
-        print('warm up ...')
+        #print('warm up ...')
+        #sys.stdout.flush()
+        #pCN_sampler.warm_up(num_warmup, skip_len=100)
+        #pCN_sampler.save_checkpoint(checkpoint_path.format(0))
+        #print('sampling ...')
+        print('loading checkpoint ...')
+        pCN_sampler.load_checkpoint('./checkpoints/pCN_checkpoint_elastic_density_2_1.npz')
         sys.stdout.flush()
-        pCN.warm_up(num_warmup, skip_len=100)
-        print('sampling ...')
-        sys.stdout.flush()
-        pCN.sample(num_samples)
+        pCN_sampler.sample(num_samples)
+        pCN_sampler.save_checkpoint('./checkpoints/pCN_checkpoint_elastic_density_2_2.npz')
 
-        samples = pCN.get_samples()
+        samples = pCN_sampler.get_samples()
         #pCN.save_checkpoint()
 
         #print(pCN.get_samples())
@@ -184,7 +190,7 @@ def run_pCN():
 
         #samples = sampler.sample(num_samples)
 
-        np.savez( './stat/stat_no_cuqi.npz', samples=samples)
+        np.savez( './stat/stat_test.npz', samples=samples)
     else:
         for i in range(num_warmup + num_samples+1):
             problem.forward_slave()
@@ -199,7 +205,7 @@ def run_Gibbs():
 
 
     #checkpoint_path = './checkpoints/Gibbs_checkpoint.pickle'
-    checkpoint_path = './checkpoints/Gibbs_checkpoint_sampled_3.pickle'
+    checkpoint_path = './checkpoints/elastic_gibbs_checkpoint.pickle'
 
     if( os.path.isfile(checkpoint_path) == False ):
         num_warmup = 2
@@ -212,7 +218,7 @@ def run_Gibbs():
     samples_inner = 20
     total_samples = 2 + 2*num_warmup*warm_up_inner + 2*num_samples*samples_inner
     if(rank == 0):
-        obs_data = np.load('./obs/obs1/obs.npz')
+        obs_data = np.load('./obs/obs2/obs.npz')
         y_true = obs_data['obs_true'].reshape(5,-1)
         noise_vec = obs_data['noise_vec']
         N_KL = obs_data['N_KL']
@@ -262,12 +268,12 @@ def run_Gibbs():
         print('sampling ...')
         sys.stdout.flush()
         sampler.sample(N_outer=num_samples, N_inner=samples_inner)
-        sampler.save_checkpoint('./checkpoints/Gibbs_checkpoint_sampled_4.pickle')
+        sampler.save_checkpoint('./checkpoints/Gibbs_checkpoint_sampled.pickle')
 
         samples = sampler.get_samples()
         saving_samples = {'p':samples[0], 's': samples[1]}
 
-        with open('./stat/stat_no_cuqi_4.pickle', 'wb') as handle:
+        with open('./stat/stat_elastic_gibbs.pickle', 'wb') as handle:
             pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         #np.savez( './stat/stat_no_cuqi.npz', samples=samples)
@@ -387,8 +393,8 @@ def dummy():
 
 if __name__ == '__main__':
     #run_pCN()
-    #run_Gibbs()
-    continue_warm_up()
+    run_Gibbs()
+    #continue_warm_up()
     #run_Gibbs_load_checkpoint()
     #dummy()
 

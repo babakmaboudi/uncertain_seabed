@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matern import matern
 import dolfin as dl
 from mpi4py import MPI
+from progressbar import progressbar
 
 from time import time
 
@@ -23,6 +24,10 @@ class Boundary_E(dl.SubDomain):
 class Boundary_N(dl.SubDomain):
     def inside(self, x, on_boundary):
         return on_boundary and dl.near(x[1],1.5, 1E-14)
+
+class Boundary_S(dl.SubDomain):
+    def inside(self, x, on_boundary):
+        return on_boundary and dl.near(x[1],-1.5, 1E-14)
 
 class init_cond(dl.UserExpression):
     def eval(elf, values, x):
@@ -98,6 +103,40 @@ class wave_speed_matern(dl.UserExpression):
         else:
             values[0] = 6.4
 
+class wave_density_matern(dl.UserExpression):
+    def __init__(self, N_x, N_kl, **kwargs):
+        super().__init__(**kwargs)
+        self.num_terms=N_kl
+        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
+        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=False, save_basis=True)
+        self.x_grid = np.linspace(-3.001,3.001,N_x)
+        self.curve = np.zeros(N_x)
+        self.var = 5
+
+    def assemble_curve(self, p):
+        self.curve = self.var*self.field.assemble(p)
+
+    def give_curve(self, p):
+        return self.var*self.field.assemble(p)
+
+    def set_s(self, s):
+        self.field.set_s(s)
+
+    def eval(self, values, x):
+        temp = (x[0] - self.x_grid)>0
+        loc = ( temp[:-1] )*( ~temp[1:] )
+        idx = np.argwhere(loc==True).item()
+        x1 = self.x_grid[idx]
+        y1 = self.curve[idx]
+        x2 = self.x_grid[idx+1]
+        y2 = self.curve[idx+1]
+
+        y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
+        if( x[1]>y ):
+            values[0] = 1.
+        else:
+            values[0] = 3.
+
 class wave():
     def __init__(self, N_x=256, N_KL=64, comm_world=None, color=0, key=0):
         self.comm_world = comm_world
@@ -117,7 +156,7 @@ class wave():
 
         # defining the function space
         self.V = dl.FunctionSpace(self.mesh,'CG', 1)
-        self.dt = 0.002
+        self.dt = 0.0019
 
         # defining test and trial spaces
         self.t = dl.TestFunction(self.V)
@@ -127,7 +166,9 @@ class wave():
         # defining the seabed curve
         self.FEM_el = self.V.ufl_element()
         self.speed_function = wave_speed_matern(N_x,N_KL,element=self.FEM_el)
+        self.density_function = wave_density_matern(N_x,N_KL,element=self.FEM_el)
         self.c = dl.Function(self.V)
+        self.rho = dl.Function(self.V)
 
         # marking domain boundaries
         boundary_markers = dl.MeshFunction('size_t',self.mesh,self.mesh.topology().dim()-1)
@@ -136,8 +177,10 @@ class wave():
         bound_w.mark(boundary_markers, 0)
         bound_e = Boundary_E()
         bound_e.mark(boundary_markers, 1)
-        bound_e = Boundary_N()
-        bound_e.mark(boundary_markers, 2)
+        bound_s = Boundary_S()
+        bound_s.mark(boundary_markers, 2)
+        bound_n = Boundary_N()
+        bound_n.mark(boundary_markers, 3)
         # defining the measure for the boundary
         self.ds = dl.Measure('ds', domain=self.mesh, subdomain_data=boundary_markers)
 
@@ -155,8 +198,8 @@ class wave():
         self.v_past = dl.Function( self.V )
 
         # weak form for the velocity equation
-        self.a = self.v*self.t*dl.dx 
-        self.L = self.v_past*self.t*dl.dx - self.dt/2*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) + self.dt/2*self.source*self.t*dl.dx
+        self.a = self.rho*self.v*self.t*dl.dx 
+        self.L = self.rho*self.v_past*self.t*dl.dx - self.dt/2*self.rho*self.c*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.rho*self.c*self.v_past*self.t*self.ds(0) - self.dt/2*self.rho*self.c*self.v_past*self.t*self.ds(1) - self.dt/2*self.rho*self.c*self.v_past*self.t*self.ds(2) - self.dt/2*self.u0*self.t*self.ds(3) + self.dt/2*self.source*self.t*dl.dx
 
     # this function initializes wave equation with an initial condition and no source term
     def initiate_load_source(self, freq):
@@ -176,8 +219,8 @@ class wave():
         self.v_past = dl.Function( self.V )
 
         # weak form for the velocity equation
-        self.a = self.v*self.t*dl.dx 
-        self.L = self.v_past*self.t*dl.dx - self.dt/2*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.v_past*self.t*self.ds(0) - self.dt/2*self.v_past*self.t*self.ds(1) - self.dt/2*self.u0*self.t*self.ds(2) #+ self.dt/2*self.source*self.t*dx
+        self.a = self.rho*self.v*self.t*dl.dx 
+        self.L = self.rho*self.v_past*self.t*dl.dx - self.dt/2*self.rho*self.c*self.c*dl.inner( dl.grad(self.u_past), dl.grad(self.t) )*dl.dx - self.dt/2*self.rho*self.c*self.v_past*self.t*self.ds(0) - self.dt/2*self.rho*self.c*self.v_past*self.t*self.ds(1) - self.dt/2*self.rho*self.c*self.v_past*self.t*self.ds(2) - self.dt/2*self.u0*self.t*self.ds(3)
 
     # this function computes and saves a state with the source term
     def save_initial_state(self):
@@ -192,7 +235,7 @@ class wave():
         t = 0
         time_steps=75
         # time steps
-        for i in range(time_steps):
+        for i in progressbar( range(time_steps) ):
             self.source.t = t
             self.stormer_verlet_step()
             t += self.dt
@@ -205,8 +248,12 @@ class wave():
     def compute_wave_speed(self, p, s):
         self.speed_function.set_s(s)
         self.speed_function.assemble_curve(p)
+        self.density_function.set_s(s)
+        self.density_function.assemble_curve(p)
         temp = dl.interpolate(self.speed_function, self.V)
-        self.c.assign(temp)
+        self.c.assign( temp )
+        temp = dl.interpolate(self.density_function, self.V)
+        self.rho.assign( temp )
 
     # second order symplectic integrator (Stormer-Verlet)
     def stormer_verlet_step(self):
@@ -289,7 +336,7 @@ class wave():
 
     # this function saves a state of the wave equation (pressure and velocity)
     def save_state(self, time, time_steps, freq, num_source):
-        path = './model_params/init_state_structured_freq_{}.xdmf'.format(freq)
+        path = './model_params/init_state_elastic_density_freq_{}.xdmf'.format(freq)
 
         dl.plot(self.u_past)
         plt.savefig('init.pdf',format='pdf')
@@ -348,17 +395,18 @@ def script_save_init_state():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
-    N_x=1024
+    N_x=512
     N_KL=256
     fmT = 100
     dist_column_width = 5
     color = int( rank/dist_column_width )
     key = rank%dist_column_width
 
-    problem = wave(N_x=512, N_KL=N_KL, comm_world=comm, color=color, key=key)
+    problem = wave(N_x=N_x, N_KL=N_KL, comm_world=comm, color=color, key=key)
     #problem.initiate_load_source(100)
     p = np.empty(N_KL)
-    problem.compute_wave_speed(p)
+    problem.compute_wave_speed(p, s=1)
+    print('{} : done with wave'.format(rank))
     problem.initiate_zero_init(fmT)
     problem.save_initial_state()
 
@@ -414,7 +462,7 @@ def script_save_png_npz_params():
 def test_parallel():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    N_x=1024
+    N_x=512
     N_KL=256
     fmT = np.array( [10, 25, 50, 75, 100] )
 
@@ -430,13 +478,13 @@ def test_parallel():
     process_group_collect = comm.group.Excl(p_list)
     comm_collect = comm.Create_group(process_group_collect)
 
-    problem = wave(N_x=512, N_KL=N_KL, comm_world=comm, color=color, key=key)
+    problem = wave(N_x=N_x, N_KL=N_KL, comm_world=comm, color=color, key=key)
     problem.initiate_load_source(fmT[color])
 
     #p = p = np.random.standard_normal(N_KL)
     #np.savez('png_npz_params.npz', p = p)
 
-    s = 0.5
+    s = 0.75
 
     if rank == 0:
         data = np.load('./model_params/png_npz_params.npz')

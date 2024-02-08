@@ -3,10 +3,12 @@ import matplotlib.pyplot as plt
 from wave import wave_speed_matern
 import pickle
 
+import seaborn as sns
+
 
 def post_process_pCN():
 
-    obs_data = np.load('./obs/obs1/obs.npz')
+    obs_data = np.load('./obs/obs2/obs.npz')
     print(obs_data.files)
     p_true = obs_data['param_true']
     N_x = obs_data['N_x']
@@ -15,7 +17,8 @@ def post_process_pCN():
 
     field.set_s(0.75)
 
-    stat_data = np.load('./stat/stat2_long_no_cuqi.npz')
+    stat_data1 = np.load('./stat/stat_test_2_2.npz')
+    stat_data2 = np.load('./stat/stat_test_2_3.npz')
 
     #samples_s = stat_data['s']
     #s_mean = np.mean(samples_s)
@@ -24,7 +27,13 @@ def post_process_pCN():
 
     field.set_s(s)
     #samples_p = stat_data['p'].T
-    samples_p = (stat_data['samples'])
+    samples1_p = (stat_data1['samples'])
+    samples2_p = (stat_data2['samples'])
+
+    print(samples1_p.shape)
+    print(samples2_p.shape)
+
+    samples_p = np.concatenate( [samples1_p, samples2_p], axis=0 )
 
     samples_p = samples_p[10000:,:]
 
@@ -69,14 +78,11 @@ def post_process_pCN():
 
     f,ax = plt.subplots(1, figsize=[6,3])
     field.plot_curve(p_true,ax, label='true seabed', color='blue')
-
-
-    #p_mean = np.mean(samples_p[8:,:],axis=0)
-
     field.plot_curve(samples_mean,ax, label='mean seabed', color='orange')
     field.plot_uq(samples_p, ax, label='99% CI')
     ax.set_xlabel('x (km)',fontsize = 18)
     ax.set_ylabel('y (km)', fontsize = 18)
+    ax.set_title('seabed estimate with fixed roughness')
     ax.legend(fontsize = 12)
 
     plt.tight_layout()
@@ -85,7 +91,7 @@ def post_process_pCN():
 
 def post_process_gibbs():
 
-    obs_data = np.load('./obs/obs1/obs.npz')
+    obs_data = np.load('./obs/obs2/obs.npz')
     print(obs_data.files)
     p_true = obs_data['param_true']
     N_x = obs_data['N_x']
@@ -94,46 +100,60 @@ def post_process_gibbs():
 
     field.set_s(0.75)
 
-    f,ax = plt.subplots(1)
-    field.plot_curve(p_true,ax, label='true seabed', color='blue')
 
 
-    with open('./stat/stat_no_cuqi.pickle', 'rb') as handle:
+
+    with open('./stat/stat_elastic_gibbs.pickle', 'rb') as handle:
         stat_data = pickle.load(handle)
 
     samples_p_1 = stat_data['p']
     samples_s_1 = stat_data['s']
 
-    with open('./stat/stat_no_cuqi_1.pickle', 'rb') as handle:
+    with open('./stat/stat_elastic_gibbs_1.pickle', 'rb') as handle:
         stat_data = pickle.load(handle)
 
     samples_p_2 = stat_data['p']
     samples_s_2 = stat_data['s']
 
-    with open('./stat/stat_no_cuqi_2.pickle', 'rb') as handle:
+    with open('./stat/stat_elastic_gibbs_2.pickle', 'rb') as handle:
         stat_data = pickle.load(handle)
 
     samples_p_3 = stat_data['p']
     samples_s_3 = stat_data['s']
 
-    with open('./stat/stat_no_cuqi_3.pickle', 'rb') as handle:
+    with open('./stat/stat_elastic_gibbs_3.pickle', 'rb') as handle:
         stat_data = pickle.load(handle)
 
     samples_p_4 = stat_data['p']
     samples_s_4 = stat_data['s']
 
-    samples_p = np.concatenate([samples_p_1,samples_p_2,samples_p_3,samples_p_4], axis=0)
-    samples_s = np.concatenate([samples_s_1,samples_s_2,samples_s_3,samples_s_4], axis=0)
-    #samples_p = samples_p_3
+    with open('./stat/stat_elastic_gibbs_4.pickle', 'rb') as handle:
+        stat_data = pickle.load(handle)
+
+    samples_p_5 = stat_data['p']
+    samples_s_5 = stat_data['s']
+
+    #with open('./stat/stat_no_cuqi_3.pickle', 'rb') as handle:
+    #    stat_data = pickle.load(handle)
+
+    #samples_p_4 = stat_data['p']
+    #samples_s_4 = stat_data['s']
+
+    samples_p = np.concatenate([samples_p_1,samples_p_2,samples_p_3,samples_p_4,samples_p_5], axis=0)
+    samples_s = np.concatenate([samples_s_1,samples_s_2,samples_s_3,samples_s_4,samples_s_5], axis=0)
+    #samples_p = samples_p[300:,:]
+    #samples_s = samples_s[300:,:]
     #samples_s = samples_s_3
 
-    #samples_s = stat_data['s']
-    #s_mean = np.mean(samples_s)
 
     #f,ax = plt.subplots(1)
     #ax.plot(samples_s.reshape(-1))
     #plt.savefig('./plots/trace_s.pdf',dpi=300)
     #exit()
+
+    # Thinning
+    samples_p = samples_p[1000:,:]
+    samples_s = samples_s[1000:]
 
     s_mean = np.mean(samples_s,axis=0)
     print(s_mean)
@@ -165,11 +185,16 @@ def post_process_gibbs():
 
     #p_mean = np.mean(samples_p[8:,:],axis=0)
 
+    f,ax = plt.subplots(1, figsize=[6,3])
+    field.plot_curve(p_true,ax, label='true seabed', color='blue')
     field.plot_curve(samples_mean,ax, label='mean seabed', color='orange')
-    field.plot_uq(samples_p[500:,:], ax, label='99% CI')
+    field.plot_uq(samples_p, ax, label='99% CI')
     ax.set_xlabel('x (km)',fontsize = 18)
     ax.set_ylabel('y (km)', fontsize = 18)
-    ax.legend()
+    ax.set_title('seabed estimate with unknown roughness')
+    ax.legend(fontsize = 12)
+
+    plt.tight_layout()
     plt.savefig('./plots/curve_gibbs.pdf',dpi=300)
 
     idx = np.random.permutation( samples_p.shape[0] )
@@ -190,6 +215,19 @@ def post_process_gibbs():
     ax.legend(fontsize = 12)
     plt.tight_layout()
     plt.savefig('./plots/posterior_samples_gibbs.pdf',dpi=300)
+
+    f,ax = plt.subplots(1, figsize=[6,4])
+    sns.kdeplot(samples_s, ax=ax, linewidth=2)
+    ax.axvline(x = 0.75, color = 'r', linewidth=2)
+    ax.axvline(x = s_mean, color = 'g', linewidth=2)
+    ax.set_xlabel('s')
+    ax.legend(['seabed roughness posterior', 'true roughness', 'mean roughness'])
+    ax.set_xlim([0.5,1])
+    
+    #exit()
+    plt.tight_layout()
+    plt.savefig('./plots/posterior_roughness.pdf',dpi=300)
+
 
 if __name__ == '__main__':
     #post_process_pCN()

@@ -30,7 +30,7 @@ def save_obs():
     for i in range( obs_true.shape[0] ):
         noise_vec[i] /= np.linalg.norm( noise_vec[i].flatten() )
 
-    np.savez('./obs/obs1/obs.npz', N_KL=N_KL, N_x=N_x, obs_true=obs_true, noise_vec=noise_vec, param_true=p )
+    np.savez('./obs/obs2/obs.npz', N_KL=N_KL, N_x=N_x, obs_true=obs_true, noise_vec=noise_vec, param_true=p )
 
 def read_obs():
     data = np.load('./obs/obs1/obs.npz')
@@ -48,41 +48,6 @@ def read_obs():
         #print(y_obs[i].shape)
         plt.imshow(y_obs[i])
         plt.savefig('noisy_{}.pdf'.format(i),dpi=300)
-
-def plot_seabed():
-    data = np.load('./obs/obs1/obs.npz')
-    p_true = data['param_true']
-    N_x = data['N_x']
-    N_KL = data['N_KL']
-    field = wave_speed_matern(N_x,N_KL)
-
-    field.set_s(0.75)
-    f,ax = plt.subplots(1, figsize = (6,3))
-    field.plot_curve(p_true,ax, label='true seabed', color='blue')
-
-    x1 = -2 * np.ones(100)
-    x2 = 2 * np.ones(100)
-    y = np.linspace(-1.5,1.5,100)
-
-    ax.plot(x1,y,'r--')
-    ax.plot(x2,y,'r--', label='computational domain')
-    
-
-    xx = np.linspace(-3,3,186)
-    for x in xx:
-        ax.plot(x,1.5,'gx')
-    ax.plot(xx[0],1.5,'gx', label='sensor location')
-
-    ax.legend()
-
-    ax.set_xlabel('x (longitude in km)')
-    ax.set_ylabel('y (depth in km)')
-
-    plt.tight_layout()
-
-
-    plt.savefig('bottom.pdf',dpi=300)
-
 
 
 if __name__ == '__main__':
