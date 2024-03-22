@@ -298,7 +298,7 @@ class wave():
         out = []
         for i in range(2000):
             self.stormer_verlet_step()
-            if(i>=700):
+            if(i>=500):
                 out.append( self.u_past.vector().get_local()[self.bnd_idx].reshape(1,-1) )
         return np.concatenate(out, axis=0)
 

@@ -70,48 +70,59 @@ class source_term(dl.UserExpression):
     def eval(self, values, x):
         for s in self.source_loc:
             values[0] += (1- 2*np.pi**2*self.fmT**2*self.t**2 ) * np.exp( -np.pi**2*self.fmT**2*self.t**2  ) * np.exp( -( (x[0] - s )**2 + (x[1] - self.depth)**2)/(0.05**2) )
- 
-class wave_speed_matern(dl.UserExpression):
-    def __init__(self, N_x, N_kl, **kwargs):
+
+class wave_speed_custom(dl.UserExpression):
+    def __init__(self, N_x, **kwargs):
         super().__init__(**kwargs)
-        self.num_terms=N_kl
-        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
-        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=False, save_basis=True)
+
         self.x_grid = np.linspace(-3.001,3.001,N_x)
-        self.curve = np.zeros(N_x)
-        self.var = 5
+        self.curve = self.make_curve(self.x_grid)
+        #self.curve = np.zeros_like(self.x_grid)
 
-    def assemble_curve(self, p):
-        self.curve = self.var*self.field.assemble(p)
+    def make_curve(self,x):
+        y = np.zeros_like(x)
+        idx = np.array( (x>-1.2)*(x<=-.8) , dtype='int')
+        np_idx = np.where(idx>0)[0]
 
-    def give_curve(self, p):
-        return self.var*self.field.assemble(p)
+        x_local = np.linspace(-.2,.2,sum(idx))
+        y_local = -0.25*(0.5 + 0.5*np.tanh(20*x_local))
 
-    def set_s(self, s):
-        self.field.set_s(s)
+        y[np_idx] = y_local
 
-    def plot_curve(self, p, ax, label=None, color=None):
-        u = self.var*self.field.assemble(p)
-        x = np.linspace( -3,3, len(u) )
-        ax.plot(x,u,label=label, color=color)
-        ax.set_aspect('equal')
-        #ax.set_xlim([-2,2])
-        ax.set_ylim([-1.5,1.5])
+        idx = np.array( (x>-.8)*(x<=-.7) , dtype='int')
+        np_idx = np.where(idx>0)[0]
 
-    def plot_uq(self, sample_p, ax, label=None, color=None):
-        u = []
-        for i in range(sample_p.shape[0]):
-            u.append( self.var*self.field.assemble( sample_p[i] ) )
-        u = np.array( u )
+        y[np_idx] = -0.25*np.ones_like(np_idx)
 
-        hdi_intervals = []
-        for i in range(u.shape[1]):
-            local_interval = arviz.hdi( u[:,i], hdi_prob=.99 )
-            hdi_intervals.append( local_interval.reshape(-1) )
-        hdi_intervals = np.array(hdi_intervals)
+        idx = np.array( (x>-.7)*(x<=-.3) , dtype='int')
+        np_idx = np.where(idx>0)[0]
 
-        x = np.linspace( -3,3, len(u[0]) )
-        ax.fill_between(x, hdi_intervals[:,0], hdi_intervals[:,1], alpha=0.5,color=color, label=label)
+        x_local = np.linspace(-.2,.2,sum(idx))
+        y_local = -0.25*(0.5 + 0.5*np.tanh(-20*x_local))
+
+        y[np_idx] = y_local
+
+        idx = np.array( (x>.15)*(x<=.85) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        x_local = np.linspace(-.35,.35,sum(idx))
+        y_local = 0.5*(0.5 + 0.5*np.tanh(10*x_local))
+
+        y[np_idx] = y_local
+
+        idx = np.array( (x>.85)*(x<=1.15) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        y[np_idx] = 0.5*np.ones_like(np_idx)
+
+        idx = np.array( (x>1.15)*(x<=1.85) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        x_local = np.linspace(-.35,.35,sum(idx))
+        y_local = 0.5*(0.5 + 0.5*np.tanh(-10*x_local))
+
+        y[np_idx] = y_local
+        return y
 
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
@@ -128,24 +139,66 @@ class wave_speed_matern(dl.UserExpression):
         else:
             values[0] = 6.4
 
-class wave_density_matern(dl.UserExpression):
-    def __init__(self, N_x, N_kl, **kwargs):
+    def plot_curve(self, ax, label=None, color=None):
+        u = self.curve
+        x = np.linspace( -3,3, len(u) )
+        ax.plot(x,u,label=label, color=color)
+        ax.set_aspect('equal')
+        #ax.set_xlim([-2,2])
+        ax.set_ylim([-1.5,1.5])
+
+class wave_density_custom(dl.UserExpression):
+    def __init__(self, N_x, **kwargs):
         super().__init__(**kwargs)
-        self.num_terms=N_kl
-        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
-        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=False, save_basis=True)
+
         self.x_grid = np.linspace(-3.001,3.001,N_x)
-        self.curve = np.zeros(N_x)
-        self.var = 5
+        self.curve = self.make_curve(self.x_grid)
+        #self.curve = np.zeros_like(self.x_grid)
 
-    def assemble_curve(self, p):
-        self.curve = self.var*self.field.assemble(p)
+    def make_curve(self, x):
+        y = np.zeros_like(x)
+        idx = np.array( (x>-1.2)*(x<=-.8) , dtype='int')
+        np_idx = np.where(idx>0)[0]
 
-    def give_curve(self, p):
-        return self.var*self.field.assemble(p)
+        x_local = np.linspace(-.2,.2,sum(idx))
+        y_local = -0.25*(0.5 + 0.5*np.tanh(20*x_local))
 
-    def set_s(self, s):
-        self.field.set_s(s)
+        y[np_idx] = y_local
+
+        idx = np.array( (x>-.8)*(x<=-.7) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        y[np_idx] = -0.25*np.ones_like(np_idx)
+
+        idx = np.array( (x>-.7)*(x<=-.3) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        x_local = np.linspace(-.2,.2,sum(idx))
+        y_local = -0.25*(0.5 + 0.5*np.tanh(-20*x_local))
+
+        y[np_idx] = y_local
+
+        idx = np.array( (x>.15)*(x<=.85) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        x_local = np.linspace(-.35,.35,sum(idx))
+        y_local = 0.5*(0.5 + 0.5*np.tanh(10*x_local))
+
+        y[np_idx] = y_local
+
+        idx = np.array( (x>.85)*(x<=1.15) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        y[np_idx] = 0.5*np.ones_like(np_idx)
+
+        idx = np.array( (x>1.15)*(x<=1.85) , dtype='int')
+        np_idx = np.where(idx>0)[0]
+
+        x_local = np.linspace(-.35,.35,sum(idx))
+        y_local = 0.5*(0.5 + 0.5*np.tanh(-10*x_local))
+
+        y[np_idx] = y_local
+        return y
 
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
@@ -162,21 +215,31 @@ class wave_density_matern(dl.UserExpression):
         else:
             values[0] = 3.
 
+    def plot_curve(self, ax, label=None, color=None):
+        u = self.curve
+        x = np.linspace( -3,3, len(u) )
+        ax.plot(x,u,label=label, color=color)
+        ax.set_aspect('equal')
+        #ax.set_xlim([-2,2])
+        ax.set_ylim([-1.5,1.5])
+
 class wave():
-    def __init__(self, N_x=256, N_KL=64):
+    def __init__(self, N_x=256):
         # uncomment to save mesh
-        #self.mesh = RectangleMesh(Point(-3, -1.5), Point(3, 1.5), 188, 94)
+        #self.mesh = dl.RectangleMesh(dl.Point(-3, -1.5), dl.Point(3, 1.5), 188, 94)
+        self.mesh = dl.RectangleMesh(dl.Point(-3, -1.5), dl.Point(3, 1.5), 376, 188)
         #with XDMFFile("./model_params/mesh_structured.xdmf") as file:
         #    file.write(self.mesh)
 
         # uncomment to load mesh from file
-        self.mesh = dl.Mesh()
-        with dl.XDMFFile("./model_params/mesh_structured.xdmf") as infile:
-            infile.read(self.mesh)
+        #self.mesh = dl.Mesh()
+        #with dl.XDMFFile("./model_params/mesh_structured.xdmf") as infile:
+        #    infile.read(self.mesh)
 
         # defining the function space
         self.V = dl.FunctionSpace(self.mesh,'CG', 1)
-        self.dt = 0.0019
+        #self.dt = 0.0019
+        self.dt = 0.00095
 
         # defining test and trial spaces
         self.t = dl.TestFunction(self.V)
@@ -185,12 +248,15 @@ class wave():
 
         # defining the seabed curve
         self.FEM_el = self.V.ufl_element()
-        self.speed_function = wave_speed_matern(N_x,N_KL,element=self.FEM_el)
-        self.density_function = wave_density_matern(N_x,N_KL,element=self.FEM_el)
+        self.speed_function = wave_speed_custom(N_x,element=self.FEM_el)#wave_speed_matern(N_x,N_KL,element=self.FEM_el)
+        self.density_function = wave_density_custom(N_x,element=self.FEM_el)#wave_density_matern(N_x,N_KL,element=self.FEM_el)
         self.c = dl.Function(self.V)
-        print(self.c.vector().get_local().shape)
-        exit()
         self.rho = dl.Function(self.V)
+
+        temp = dl.interpolate(self.speed_function, self.V)
+        self.c.assign( temp )
+        temp = dl.interpolate(self.density_function, self.V)
+        self.rho.assign( temp )
 
         # marking domain boundaries
         boundary_markers = dl.MeshFunction('size_t',self.mesh,self.mesh.topology().dim()-1)
@@ -226,7 +292,7 @@ class wave():
         self.init_u = dl.Function( self.V )
         self.init_v = dl.Function( self.V )
 
-        init_path = './model_params/init_state_elastic_density_freq_{}.xdmf'.format(freq)
+        init_path = './model_params/init_state_elastic_density_fine_freq_{}.xdmf'.format(freq)
         file = dl.XDMFFile(init_path)
         file.read_checkpoint(self.init_u, 'u_past', 0)
         file.read_checkpoint(self.init_v, 'v_past', 0)
@@ -249,11 +315,14 @@ class wave():
         file = dl.File(path)
 
         t = 0
-        time_steps=75
+        time_steps=150
         # time steps
         for i in progressbar( range(time_steps) ):
             self.source.t = t
             self.stormer_verlet_step()
+            #f, ax = plt.subplots(1)
+            #c = dl.plot(self.u_past)
+            #plt.savefig('./solution/fig{}.pdf'.format(i))
             t += self.dt
             if( np.mod(i,10) == 0 ):
                 file << (self.u_past, i*self.dt)
@@ -291,21 +360,21 @@ class wave():
         self.u_past.assign( self.init_u )
         self.v_past.assign( self.init_v )
 
-        #path = './solution/sol{}.pvd'.format(idx)
-        #file = dl.File(path)
+        path = './solution/sol{}.pvd'.format(idx)
+        file = dl.File(path)
 
         t = 0
 
-        sol = []
-        for i in progressbar( range(2000) ):
+        #sol = []
+        for i in progressbar( range(4000) ):
             self.stormer_verlet_step()
             t += self.dt
 
-            sol.append( self.u_past.vector().get_local() )
-            #if( np.mod(i,10) == 0 ):
-            #    file << (self.u_past, i*self.dt)
+            #sol.append( self.u_past.vector().get_local() )
+            if( np.mod(i,10) == 0 ):
+                file << (self.u_past, i*self.dt)
 
-        return np.array(sol)
+        #return np.array(sol)
 
     def time_stepping_xdmf(self,path='./solution/sol4_ref.pvd'):
         self.A = dl.assemble(self.a)
@@ -361,9 +430,13 @@ class wave():
         self.solver = dl.LUSolver(self.A)
 
         out = []
-        for i in progressbar( range(2000) ):
+        #t = 0
+        #ts = []
+        for i in progressbar( range(4000) ):
             self.stormer_verlet_step()
-            if(i>=700):
+            #t += self.dt
+            #ts.append(t)
+            if(i>=1000):
                 out.append( self.u_past.vector().get_local()[self.bnd_idx].reshape(1,-1) )
         return np.concatenate(out, axis=0)
 
@@ -386,9 +459,10 @@ class wave():
         sorted_idx = np.argsort(x_coords)
 
         self.bnd_idx = self.bnd_idx[sorted_idx]
+        self.bnd_idx = self.bnd_idx[::2]
 
-    def forward(self, p, s=0.75):
-        self.compute_wave_speed(p, s)
+    def forward(self, p=0, s=0.75):
+        #self.compute_wave_speed(p, s)
         self.u_past.assign( self.init_u )
         self.v_past.assign( self.init_v )
 
@@ -406,7 +480,7 @@ class wave():
         np.savez(path.format(freq), u_past_np=u_past, v_past_np=v_past, dt=self.dt, time=time, time_steps=time_steps, freq=freq, num_source=num_source)
 
     def save_state(self, time, time_steps, freq, num_source):
-        path = './model_params/init_state_elastic_density_freq_{}.xdmf'.format(freq)
+        path = './model_params/init_state_elastic_density_fine_freq_{}.xdmf'.format(freq)
 
         dl.plot(self.u_past)
         plt.savefig('init.pdf',format='pdf')
@@ -426,140 +500,76 @@ class wave():
     def plot_wave_speed(self):
         plot( self.c )
 
-def save_png():
-    N_x=1024
-    N_KL=256 
+def script_save_initial_state():
+    N_x=512
+    
+    freq = [ 50, 75, 100 ]
+    for fmT in freq:
+        problem = wave(N_x=N_x)
+        print(fmT)
+        problem.initiate_zero_init(fmT)
+        problem.save_initial_state()
+    #problem.initiate_load_source_xdmf(fmT)
+    #problem.time_stepping(0)
+
+def save_solution():
+    N_x=512
+
+    fmT = 10
+    problem = wave(N_x=N_x)
+    problem.initiate_load_source_xdmf(fmT)
+    problem.time_stepping(0)
+
+
+def save_costum_sginal():
+    #N_x = 512
+    #problem = wave(N_x=N_x)
+
+    #fmT = 10
+    #problem = wave(N_x=N_x)
+    #problem.initiate_load_source_xdmf(fmT)
+    ##problem.time_stepping(0)
+    #out = problem.forward()
+    #out = out[1::2,:]
+
+    #plt.imshow(out)
+    #plt.savefig('out2.pdf')
+    #exit()
+
+    N_x=512
 
     fmT = np.array( [10, 25, 50, 75, 100] )
     obs = []
-    for i, freq in enumerate(fmT):
-        problem = wave(N_x=512, N_KL=N_KL)
-        problem.initiate_load_source_xdmf(freq)
-        data = np.load('./model_params/png_npz_params.npz')
-        p = data['p']
-        problem.compute_wave_speed( p )
 
-        problem.time_stepping_save_png(i)
-
-def save_obs():
-    data = np.load('./obs/obs2/obs.npz')
-    p_true = data['param_true']
-    N_x = data['N_x']
-    N_KL = data['N_KL']
-
-    fmT = np.array( [10, 25, 50, 75, 100] )
-    obs = []
-    for i, freq in enumerate(fmT):
-        problem = wave(N_x=N_x, N_KL=N_KL)
-        problem.initiate_load_source_xdmf(freq)
-        data = np.load('./model_params/png_npz_params.npz')
-        problem.compute_wave_speed( p_true )
-
-        problem.time_stepping(i)
-
-def save_ref_solution():
-    N_x=1024
-    N_KL=256 
-
-    fmT = np.array( [10, 25, 50, 75, 100] )
-    obs = []
     for freq in fmT:
-        problem = wave(N_x=512, N_KL=N_KL)
+        problem = wave(N_x=N_x)
         problem.initiate_load_source_xdmf(freq)
-        data = np.load('./model_params/png_npz_params.npz')
-        p = data['p']
 
-        out = problem.forward(p, s=0.5)
+        out = problem.forward()
+        out = out[1::2,:]
+        obs.append(out)
 
         f, ax = plt.subplots(1)
         ax.imshow(out)
         ax.set_xlabel('x')
         ax.set_ylabel('time')
-        plt.savefig('./solution_ref/obs_freq_s_50_{}.pdf'.format(freq), format='pdf', dpi=300)
+        plt.savefig('./obs/obs_costum/freq_{}.pdf'.format(freq), format='pdf', dpi=300)
 
-        np.savez('./solution_ref/sol_freq_s_50_{}.npz'.format(freq), obs=out)
+    obs_true = np.array(obs)
+    noise_vec = np.random.standard_normal( obs_true.shape )
+    for i in range( obs_true.shape[0] ):
+        noise_vec[i] /= np.linalg.norm( noise_vec[i].flatten() )
 
-def save_solution():
-    N_x=512
-    N_KL=256 
-
-    fmT = 10
-    problem = wave(N_x=N_x, N_KL=N_KL)
-    problem.initiate_load_source_xdmf(fmT)
-    data = np.load('./model_params/png_npz_params.npz')
-    p = data['p']
-    problem.compute_wave_speed( p )
-    problem.time_stepping_xdmf(path='./solution/sol_s_ref.pvd')
-
-def save_solution_vector():
-    data = np.load('./obs/obs2/obs.npz')
-    p_true = data['param_true']
-    N_x = data['N_x']
-    N_KL = data['N_KL']
-
-    fmT = 10
-    problem = wave(N_x=N_x, N_KL=N_KL)
-    problem.initiate_load_source_xdmf(fmT)
-
-    problem.compute_wave_speed(p_true, 0.75)
-    out = problem.time_stepping(0)
-
-    np.savez('obs/solution.npz',sol=out)
+    np.savez('./obs/obs_costum/obs.npz', N_x=N_x, N_KL=256, obs_true=obs_true, noise_vec=noise_vec )
 
 
+    #    problem.time_stepping(i)
 
-def script():
-    N_x=1024
-    N_KL=256 
-    problem = wave(N_x=512, N_KL=N_KL)
-    #problem.propagate_with_source(freq=100)
-    #problem.initiate_load_source(10)
-
-    problem.initiate_load_source_xdmf(10)
-
-    #p = np.random.standard_normal(N_KL)
-    data = np.load('./model_params/png_npz_params.npz')
-    p = data['p']
-    problem.compute_wave_speed( p )
-    out = problem.forward(p)
-
-    plt.imshow(out)
-    plt.savefig('obs_single.pdf')
-    #problem.time_stepping_xdmf()
-    #problem.time_stepping_save_png()
-    #p = np.random.standard_normal(64)
-    #problem.compute_wave_speed(p)
-    #problem.save_wave_speed()
-
-    #exit()
-    #problem.load_state()
-    #problem.time_stepping()
-
-def script_save_init_state():
-#    comm = MPI.COMM_WORLD
-#    rank = comm.Get_rank()
-
-    N_x=512
-    N_KL=256
-    fmT = 10
-    #dist_column_width = 5
-    #color = int( rank/dist_column_width )
-    #key = rank%dist_column_width
-
-    problem = wave(N_x=N_x, N_KL=N_KL)
-    #problem.initiate_load_source(100)
-    p = np.empty(N_KL)
-    problem.compute_wave_speed(p)
-    problem.initiate_zero_init(fmT)
-    problem.save_initial_state()
 
 
 
 if __name__ == '__main__':
-    #script_save_init_state()
-    #save_ref_solution()
     #save_solution()
-    #save_png()
-    #save_obs()
+    #script_save_initial_state()
+    save_costum_sginal()
 
-    save_solution_vector()

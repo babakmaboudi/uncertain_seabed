@@ -203,7 +203,7 @@ def run_Gibbs():
     problem = forward_problem(comm, rank)
 
 
-    checkpoint_path = './checkpoints/Gibbs_checkpoint.pickle'
+    checkpoint_path = './checkpoints/custom_gibbs_checkpoint.pickle'
 
     if( os.path.isfile(checkpoint_path) == False ):
         num_warmup = 2
@@ -212,12 +212,11 @@ def run_Gibbs():
         num_warmup = 0
         warm_up_inner = 0
 
-    num_samples = 2
-    samples_inner = 2
+    num_samples = 10
+    samples_inner = 20
     total_samples = 2 + 2*num_warmup*warm_up_inner + 2*num_samples*samples_inner
-
     if(rank == 0):
-        obs_data = np.load('./obs/obs1/obs.npz')
+        obs_data = np.load('./obs/obs_costum/obs.npz')
         y_true = obs_data['obs_true'].reshape(5,-1)
         noise_vec = obs_data['noise_vec']
         N_KL = obs_data['N_KL']
@@ -239,7 +238,6 @@ def run_Gibbs():
         y_obs = np.array(y_obs).flatten()
 
         np.random.seed(0)
-
         inits = [ np.zeros(N_KL), np.array([1]) ]
         log_likelihood = lambda p, s: -0.5*np.sum( (problem.forward_master(p, s) - y_obs)**2/cov_diag )
 
@@ -268,29 +266,17 @@ def run_Gibbs():
         print('sampling ...')
         sys.stdout.flush()
         sampler.sample(N_outer=num_samples, N_inner=samples_inner)
-        sampler.save_checkpoint('./checkpoints/Gibbs_checkpoint_sampled.pickle')
+        sampler.save_checkpoint('./checkpoints/custom_gibbs_checkpoint_sampled.pickle')
 
         samples = sampler.get_samples()
-        #pCN.save_checkpoint()
-
-        #print(pCN.get_samples())
-
-        #posterior = joint(y=y_obs)
-        #sampler = pCN(posterior,x0=np.zeros(N_KL))
-        #sampler = Gibbs(posterior, {'s':Metro, 'p':PCN})
-
-        #samples = sampler.sample(num_samples)
-
         saving_samples = {'p':samples[0], 's': samples[1]}
 
-        #with open('./stat/stat_no_cuqi.pickle', 'wb') as handle:
-        #    pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        with open('./stat/stat_custom_gibbs.pickle', 'wb') as handle:
+            pickle.dump(saving_samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         #np.savez( './stat/stat_no_cuqi.npz', samples=samples)
     else:
         for i in range(total_samples):
-            print(rank)
-            sys.stdout.flush()
             problem.forward_slave()
         #for i in range(num_samples):
         #    problem.forward_slave()
@@ -330,7 +316,5 @@ if __name__ == '__main__':
     run_Gibbs()
     #run_Gibbs_load_checkpoint()
     #dummy()
-
-
 
 

@@ -162,8 +162,41 @@ def plot_time_snapshots():
     #    plt.savefig('plots/snap_{}.pdf'.format(i))
     #    ax.clear()
 
+def plot_prior_samples():
+    data = np.load('./obs/obs2/obs.npz')
+    p_true = data['param_true']
+    N_x = data['N_x']
+    N_KL = data['N_KL']
+
+    fmT = 10
+    problem = wave(N_x=N_x, N_KL=N_KL)
+
+
+    problem.compute_wave_speed( p_true )
+    #fig, axes = plt.subplots(4,1,sharex=True, sharey=True, figsize=[6,3])
+    fig, ax = plt.subplots(1,figsize=[6,3])
+
+    p = np.random.standard_normal( p_true.shape )
+    ss = np.array([0.6, 1., 1.5, 2.])
+    colors = ['red', 'blue', 'black', 'green']
+
+    for i, s in enumerate(ss):
+        problem.compute_wave_speed( p=p, s=s )
+        #axes[i].plot( problem.speed_function.x_grid, problem.speed_function.curve, color='red' , label='seabed')
+        problem.speed_function.plot_curve(p, ax, label=r'$s={}$'.format(s), color=colors[i])
+
+    ax.set_xlabel(r'x (km)')
+    ax.set_ylabel(r'y (km)')
+
+    plt.legend()
+    #plt.subplots_adjust(hspace=0)
+    plt.tight_layout()
+    plt.savefig('plots/prior.png'.format(i),format='png',dpi=300)
+        
+
 
 
 if __name__ == '__main__':
     #plot_seabed()
-    plot_time_snapshots()
+    #plot_time_snapshots()
+    plot_prior_samples()
