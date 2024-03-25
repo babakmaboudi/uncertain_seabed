@@ -5,6 +5,11 @@ import pickle
 
 import seaborn as sns
 
+import arviz
+
+plt.rcParams['xtick.labelsize']=22
+plt.rcParams['ytick.labelsize']=22
+
 
 def post_process_pCN():
 
@@ -35,17 +40,48 @@ def post_process_pCN():
 
     samples_p = np.concatenate( [samples1_p, samples2_p], axis=0 )
 
-    samples_p = samples_p[10000:,:]
 
 
-    #f, ax = plt.subplots(1)
-    #for i in range(5):
-    #    ax.plot(samples_p[:,i], label='mode no. {}'.format(i+1))
+    f, ax = plt.subplots(1)
+    for i in range(5):
+        ax.plot(samples_p[:,i], label=r'$\beta_{}$'.format(i+1))
 
-    #ax.set_xlabel('sample idx',fontsize = 18)
-    #ax.set_ylabel('trace', fontsize = 18)
-    #ax.legend(fontsize = 12)
-    #plt.savefig('./plots/trace_pCN.pdf',dpi=300)
+    ax.set_xlabel('sample index',fontsize = 18)
+    ax.set_ylabel('trace', fontsize = 18)
+    ax.set_xticks([0,10000,20000,30000])
+    ax.set_xticklabels(['0','10K','20K','30K'])
+    ax.legend(fontsize = 16)
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig('./plots/trace_pCN.pdf',dpi=300)
+    samples_p = samples_p[15000:,:]
+
+    f, ax = plt.subplots(1)
+
+    means = []
+    intervals = []
+    for i in range(25):
+        means.append( np.mean(samples_p[:,i]) )
+        intervals.append( arviz.hdi(  samples_p[:,i], prob=0.95 ) )
+
+    means = np.array(means)
+    intervals = np.array(intervals).T
+    intervals = intervals - means
+    intervals[0,:] = -intervals[0,:]
+
+    ax.errorbar(np.array(list(range(25))), means, yerr=intervals, fmt='o', elinewidth=3, label=r'95% HPD', alpha=0.7)
+    ax.scatter(np.array(list(range(25))), p_true[:25], label=r'true $\beta_j$', color='orange')
+    ax.set_xlabel(r'index $j$',fontsize = 18)
+    ax.set_ylabel(r'$\beta_j$', fontsize = 18)
+    ax.set_xticks([0,4,9,14,19,24])
+    ax.set_xticklabels([1,5,10,15,20,25])
+    ax.legend(fontsize = 16)
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig('./plots/hdi_pCN.pdf',dpi=300)
+
+    #for i in range(50):
+    #    print(arviz.ess(samples_p[:,i]))
     #exit()
     
 
@@ -80,9 +116,9 @@ def post_process_pCN():
     field.plot_curve(p_true,ax, label='true seabed', color='blue')
     field.plot_curve(samples_mean,ax, label='mean seabed', color='orange')
     field.plot_uq(samples_p, ax, label='99% CI')
-    ax.set_xlabel('x (km)',fontsize = 18)
-    ax.set_ylabel('y (km)', fontsize = 18)
-    ax.set_title('seabed estimate with fixed roughness')
+    ax.set_xlabel('x (km)',fontsize = 12)
+    ax.set_ylabel('y (km)', fontsize = 12)
+    #ax.set_title('seabed estimate with fixed roughness')
     ax.legend(fontsize = 12)
 
     plt.tight_layout()
@@ -145,6 +181,46 @@ def post_process_gibbs():
     #samples_s = samples_s[300:,:]
     #samples_s = samples_s_3
 
+    print(samples_p.shape)
+
+    f, ax = plt.subplots(1)
+    for i in range(5):
+        ax.plot(samples_p[:,i], label=r'$\beta_{}$'.format(i+1))
+
+    ax.set_xlabel('sample index',fontsize = 24)
+    ax.set_ylabel('trace', fontsize = 24)
+    ax.set_xticks([0,500,1000,1500,2000])
+    ax.set_xticklabels(['0','0.5K','1K','1.5K','3K'])
+    ax.legend(fontsize = 24)
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig('./plots/trace_Gibbs2.pdf',dpi=300)
+    #samples_p = samples_p[15000:,:]
+
+    f, ax = plt.subplots(1)
+
+    means = []
+    intervals = []
+    for i in range(25):
+        means.append( np.mean(samples_p[:,i]) )
+        intervals.append( arviz.hdi(  samples_p[:,i], prob=0.95 ) )
+
+    means = np.array(means)
+    intervals = np.array(intervals).T
+    intervals = intervals - means
+    intervals[0,:] = -intervals[0,:]
+
+    ax.errorbar(np.array(list(range(25))), means, yerr=intervals, fmt='o', elinewidth=3, label=r'95% HPD', alpha=0.7)
+    ax.scatter(np.array(list(range(25))), p_true[:25], label=r'true $\beta_j$', color='orange')
+    ax.set_xlabel(r'index $j$',fontsize = 24)
+    ax.set_ylabel(r'$\beta_j$', fontsize = 24)
+    ax.set_xticks([0,4,9,14,19,24])
+    ax.set_xticklabels([1,5,10,15,20,25])
+    ax.legend(fontsize = 24,loc=4)
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig('./plots/hdi_Gibbs.pdf',dpi=300)
+
 
     #f,ax = plt.subplots(1)
     #ax.plot(samples_s.reshape(-1))
@@ -152,11 +228,10 @@ def post_process_gibbs():
     #exit()
 
     # Thinning
-    samples_p = samples_p[1000:,:]
-    samples_s = samples_s[1000:]
+    samples_p = samples_p[500:,:]
+    samples_s = samples_s[500:]
 
     s_mean = np.mean(samples_s,axis=0)
-    print(s_mean)
 
     field.set_s(s_mean)
     #samples_p = stat_data['p'].T
@@ -185,43 +260,59 @@ def post_process_gibbs():
 
     #p_mean = np.mean(samples_p[8:,:],axis=0)
 
+    #f,ax = plt.subplots(1, figsize=[6,3])
+    #field.plot_curve(p_true,ax, label='true seabed', color='blue')
+    #field.plot_curve(samples_mean,ax, label='mean seabed', color='orange')
+    #field.plot_uq(samples_p, ax, label='99% CI')
+    #ax.set_xlabel('x (km)',fontsize = 18)
+    #ax.set_ylabel('y (km)', fontsize = 18)
+    #ax.set_title('seabed estimate with unknown roughness')
+    #ax.legend(fontsize = 12)
+
+    #plt.tight_layout()
+    #plt.savefig('./plots/curve_gibbs.pdf',dpi=300)
+    samples_mean = np.mean(samples_p, axis=0)
+
+    #print(np.mean( samples_s[0,400:]) )
+
     f,ax = plt.subplots(1, figsize=[6,3])
     field.plot_curve(p_true,ax, label='true seabed', color='blue')
     field.plot_curve(samples_mean,ax, label='mean seabed', color='orange')
     field.plot_uq(samples_p, ax, label='99% CI')
-    ax.set_xlabel('x (km)',fontsize = 18)
-    ax.set_ylabel('y (km)', fontsize = 18)
-    ax.set_title('seabed estimate with unknown roughness')
-    ax.legend(fontsize = 12)
-
-    plt.tight_layout()
-    plt.savefig('./plots/curve_gibbs.pdf',dpi=300)
-
-    idx = np.random.permutation( samples_p.shape[0] )
-
-    f,ax = plt.subplots(1, figsize=[6,3])
-    field.set_s(samples_s[idx[0]])
-    field.plot_curve(samples_p[idx[0]],ax, label='sample', color='blue')
-    field.set_s(samples_s[idx[1]])
-    field.plot_curve(samples_p[idx[1]],ax, label='sample', color='red')
-    field.set_s(samples_s[idx[2]])
-    field.plot_curve(samples_p[idx[2]],ax, label='sample', color='green')
-    field.set_s(samples_s[idx[3]])
-    field.plot_curve(samples_p[idx[3]],ax, label='sample', color='orange')
-    field.set_s(0.75)
-    field.plot_curve(p_true,ax, label='true seabed', color='black')
-    ax.set_xlabel('x (km)',fontsize = 18)
-    ax.set_ylabel('y (km)', fontsize = 18)
+    ax.set_xlabel('x (km)',fontsize = 12)
+    ax.set_ylabel('y (km)', fontsize = 12)
+    #ax.set_title('seabed estimate with fixed roughness')
     ax.legend(fontsize = 12)
     plt.tight_layout()
-    plt.savefig('./plots/posterior_samples_gibbs.pdf',dpi=300)
+    plt.savefig('./plots/mean_uq_Gibbs.pdf',dpi=300)
 
-    f,ax = plt.subplots(1, figsize=[6,4])
-    sns.kdeplot(samples_s, ax=ax, linewidth=2)
-    ax.axvline(x = 0.75, color = 'r', linewidth=2)
-    ax.axvline(x = s_mean, color = 'g', linewidth=2)
-    ax.set_xlabel('s')
-    ax.legend(['seabed roughness posterior', 'true roughness', 'mean roughness'])
+    #idx = np.random.permutation( samples_p.shape[0] )
+
+    #f,ax = plt.subplots(1, figsize=[6,3])
+    #field.set_s(samples_s[idx[0]])
+    #field.plot_curve(samples_p[idx[0]],ax, label='sample', color='blue')
+    #field.set_s(samples_s[idx[1]])
+    #field.plot_curve(samples_p[idx[1]],ax, label='sample', color='red')
+    #field.set_s(samples_s[idx[2]])
+    #field.plot_curve(samples_p[idx[2]],ax, label='sample', color='green')
+    #field.set_s(samples_s[idx[3]])
+    #field.plot_curve(samples_p[idx[3]],ax, label='sample', color='orange')
+    #field.set_s(0.75)
+    #field.plot_curve(p_true,ax, label='true seabed', color='black')
+    #ax.set_xlabel('x (km)',fontsize = 18)
+    #ax.set_ylabel('y (km)', fontsize = 18)
+    #ax.legend(fontsize = 12)
+    #plt.tight_layout()
+    #plt.savefig('./plots/posterior_samples_gibbs.pdf',dpi=300)
+
+    f,ax = plt.subplots(1)
+    #sns.kdeplot(samples_s, ax=ax, linewidth=2)
+    sns.violinplot(x=samples_s.reshape(-1),ax=ax, label='KDE')
+    ax.axvline(x = 0.75, color = 'orange', linewidth=2, label=r'true $s$')
+    #ax.axvline(x = s_mean, color = 'g', linewidth=2)
+    #ax.set_xlabel('s')
+    ax.set_xlabel(r'$s$',fontsize = 24)
+    ax.legend(loc=3,fontsize=24)
     ax.set_xlim([0.5,1])
     
     #exit()
