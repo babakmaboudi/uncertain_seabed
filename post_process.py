@@ -7,8 +7,8 @@ import seaborn as sns
 
 import arviz
 
-plt.rcParams['xtick.labelsize']=22
-plt.rcParams['ytick.labelsize']=22
+plt.rcParams['xtick.labelsize']=16
+plt.rcParams['ytick.labelsize']=16
 
 
 def post_process_pCN():
@@ -187,15 +187,27 @@ def post_process_gibbs():
     for i in range(5):
         ax.plot(samples_p[:,i], label=r'$\beta_{}$'.format(i+1))
 
-    ax.set_xlabel('sample index',fontsize = 24)
-    ax.set_ylabel('trace', fontsize = 24)
+    ax.set_xlabel('sample index',fontsize = 18)
+    ax.set_ylabel('trace', fontsize = 18)
     ax.set_xticks([0,500,1000,1500,2000])
-    ax.set_xticklabels(['0','0.5K','1K','1.5K','3K'])
-    ax.legend(fontsize = 24)
+    ax.set_xticklabels(['0','0.5K','1K','1.5K','2K'])
+    ax.legend(fontsize = 16)
     ax.grid()
     plt.tight_layout()
     plt.savefig('./plots/trace_Gibbs2.pdf',dpi=300)
     #samples_p = samples_p[15000:,:]
+
+    f, ax = plt.subplots(1)
+    ax.plot(samples_s, label=r'$s$')
+
+    ax.set_xlabel('sample index',fontsize = 18)
+    ax.set_ylabel('trace', fontsize = 18)
+    ax.set_xticks([0,500,1000,1500,2000])
+    ax.set_xticklabels(['0','0.5K','1K','1.5K','2K'])
+    ax.legend(fontsize = 16)
+    ax.grid()
+    plt.tight_layout()
+    plt.savefig('./plots/trace_Gibbs_s.pdf',dpi=300)
 
     f, ax = plt.subplots(1)
 
@@ -212,11 +224,11 @@ def post_process_gibbs():
 
     ax.errorbar(np.array(list(range(25))), means, yerr=intervals, fmt='o', elinewidth=3, label=r'95% HPD', alpha=0.7)
     ax.scatter(np.array(list(range(25))), p_true[:25], label=r'true $\beta_j$', color='orange')
-    ax.set_xlabel(r'index $j$',fontsize = 24)
-    ax.set_ylabel(r'$\beta_j$', fontsize = 24)
+    ax.set_xlabel(r'index $j$',fontsize = 18)
+    ax.set_ylabel(r'$\beta_j$', fontsize = 18)
     ax.set_xticks([0,4,9,14,19,24])
     ax.set_xticklabels([1,5,10,15,20,25])
-    ax.legend(fontsize = 24,loc=4)
+    ax.legend(fontsize = 16,loc=4)
     ax.grid()
     plt.tight_layout()
     plt.savefig('./plots/hdi_Gibbs.pdf',dpi=300)
@@ -228,8 +240,14 @@ def post_process_gibbs():
     #exit()
 
     # Thinning
-    samples_p = samples_p[500:,:]
-    samples_s = samples_s[500:]
+    samples_p = samples_p[1500:,:]
+    samples_s = samples_s[1000:]
+
+    #for i in range(50):
+    #    print(arviz.ess(samples_p[:,i]))
+
+    #print(arviz.ess(samples_s.reshape(-1)))
+    #exit()
 
     s_mean = np.mean(samples_s,axis=0)
 
@@ -311,8 +329,8 @@ def post_process_gibbs():
     ax.axvline(x = 0.75, color = 'orange', linewidth=2, label=r'true $s$')
     #ax.axvline(x = s_mean, color = 'g', linewidth=2)
     #ax.set_xlabel('s')
-    ax.set_xlabel(r'$s$',fontsize = 24)
-    ax.legend(loc=3,fontsize=24)
+    ax.set_xlabel(r'$s$',fontsize = 18)
+    ax.legend(loc=3,fontsize=18)
     ax.set_xlim([0.5,1])
     
     #exit()

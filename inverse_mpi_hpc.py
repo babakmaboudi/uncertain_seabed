@@ -197,6 +197,134 @@ def run_pCN():
         #for i in range(num_samples):
         #    problem.forward_slave()
 
+def run_pCN_post():
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    problem = forward_problem(comm, rank)
+
+    num_warmup = 10
+    num_samples = 40
+
+    checkpoint_path = './checkpoints/pCN_checkpoint_elastic_density_pCN_post_{}.npz'
+
+    with open('./stat/stat_elastic_gibbs.pickle', 'rb') as handle:
+        stat_data = pickle.load(handle)
+
+    samples_p_1 = stat_data['p']
+    samples_s_1 = stat_data['s']
+
+    with open('./stat/stat_elastic_gibbs_1.pickle', 'rb') as handle:
+        stat_data = pickle.load(handle)
+
+    samples_p_2 = stat_data['p']
+    samples_s_2 = stat_data['s']
+
+    with open('./stat/stat_elastic_gibbs_2.pickle', 'rb') as handle:
+        stat_data = pickle.load(handle)
+
+    samples_p_3 = stat_data['p']
+    samples_s_3 = stat_data['s']
+
+    with open('./stat/stat_elastic_gibbs_3.pickle', 'rb') as handle:
+        stat_data = pickle.load(handle)
+
+    samples_p_4 = stat_data['p']
+    samples_s_4 = stat_data['s']
+
+    with open('./stat/stat_elastic_gibbs_4.pickle', 'rb') as handle:
+        stat_data = pickle.load(handle)
+
+    samples_p_5 = stat_data['p']
+    samples_s_5 = stat_data['s']
+
+    #with open('./stat/stat_no_cuqi_3.pickle', 'rb') as handle:
+    #    stat_data = pickle.load(handle)
+
+    #samples_p_4 = stat_data['p']
+    #samples_s_4 = stat_data['s']
+
+    samples_p = np.concatenate([samples_p_1,samples_p_2,samples_p_3,samples_p_4,samples_p_5], axis=0)
+    samples_s = np.concatenate([samples_s_1,samples_s_2,samples_s_3,samples_s_4,samples_s_5], axis=0)
+
+    samples_p = samples_p[1500:,:]
+    samples_s = samples_s[1500:,:]
+    p0 = np.mean(samples_p,axis=0)
+    s0 = np.mean(samples_s)
+
+    #print(p0)
+    #print(s0)
+
+    if(rank == 0):
+        print('here')
+        sys.stdout.flush()
+        obs_data = np.load('./obs/obs2/obs.npz')
+        y_true = obs_data['obs_true'].reshape(5,-1)
+        noise_vec = obs_data['noise_vec']
+        N_KL = obs_data['N_KL']
+
+        y_true = y_true.reshape( y_true.shape[0] , -1 )
+        noise_vec = noise_vec.reshape( y_true.shape[0] , -1 )
+
+        y_norm = np.linalg.norm(y_true, axis=1)
+        sigmas = []
+        cov_diag = []
+        y_obs = []
+        for i in range( y_true.shape[0] ):
+            sigmas.append( 0.05*np.linalg.norm( y_true[i] ) )
+            cov_diag.append( sigmas[-1]**2*np.ones_like( y_true[i] ) )
+            y_obs.append( y_true[i] + sigmas[i]*noise_vec[i] )
+
+        sigmas = np.array(sigmas)
+        cov_diag = np.array(cov_diag).flatten()
+        y_obs = np.array(y_obs).flatten()
+
+        np.random.seed(0)
+
+        x0 = p0
+        log_likelihood = lambda x: -0.5*np.sum( (problem.forward_master(x,s0) - y_obs)**2/cov_diag )
+
+
+        #s = Uniform(0.5,5)
+        #p = Gaussian(np.zeros(N_KL) , 1)
+        #y = Gaussian(problem.forward_master, cov_diag)
+
+        #joint = JointDistribution(p,s,y)
+
+        #problem.forward_master(x0)
+
+        pCN_sampler = pCN(x0, log_likelihood, scale=0.005)
+        #pCN_sampler.scale = 0.05
+
+        print('warm up ...')
+        sys.stdout.flush()
+        pCN_sampler.warm_up(num_warmup, skip_len=100)
+        pCN_sampler.save_checkpoint(checkpoint_path.format(0))
+        print('sampling ...')
+        #print('loading checkpoint ...')
+        #pCN_sampler.load_checkpoint('./checkpoints/pCN_checkpoint_elastic_density_2_1.npz')
+        #sys.stdout.flush()
+        pCN_sampler.sample(num_samples)
+        pCN_sampler.save_checkpoint(checkpoint_path.format(1))
+
+        samples = pCN_sampler.get_samples()
+        #pCN.save_checkpoint()
+
+        #print(pCN.get_samples())
+
+        #posterior = joint(y=y_obs)
+        #sampler = pCN(posterior,x0=np.zeros(N_KL))
+        #sampler = Gibbs(posterior, {'s':Metro, 'p':PCN})
+
+        #samples = sampler.sample(num_samples)
+
+        np.savez( './stat/stat_elastic_density_pCN_post.npz', samples=samples)
+    else:
+        for i in range(num_warmup + num_samples+1):
+            problem.forward_slave()
+        #for i in range(num_samples):
+        #    problem.forward_slave()
+
 def run_Gibbs():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -393,7 +521,8 @@ def dummy():
 
 if __name__ == '__main__':
     #run_pCN()
-    run_Gibbs()
+    #run_Gibbs()
+    run_pCN_post()
     #continue_warm_up()
     #run_Gibbs_load_checkpoint()
     #dummy()
