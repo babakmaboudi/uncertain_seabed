@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<Xdmf Version="3.0">
+  <Domain>
+    <Grid GridType="Collection" CollectionType="Temporal" Name="u_past">
+      <Grid Name="u_past_0" GridType="Uniform">
+        <Topology NumberOfElements="35344" TopologyType="Triangle" NodesPerElement="3">
+          <DataItem Dimensions="35344 3" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_0/mesh/topology</DataItem>
+        </Topology>
+        <Geometry GeometryType="XY">
+          <DataItem Dimensions="17955 2" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_0/mesh/geometry</DataItem>
+        </Geometry>
+        <Time Value="0.000000" />
+        <Attribute ItemType="FiniteElementFunction" ElementFamily="CG" ElementDegree="1" ElementCell="triangle" Name="u_past" Center="Other" AttributeType="Scalar">
+          <DataItem Dimensions="106032 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_0/cell_dofs</DataItem>
+          <DataItem Dimensions="17955 1" NumberType="Float" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_0/vector</DataItem>
+          <DataItem Dimensions="35345 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_0/x_cell_dofs</DataItem>
+          <DataItem Dimensions="35344 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_0/cells</DataItem>
+        </Attribute>
+      </Grid>
+      <Grid Name="u_past_1" GridType="Uniform">
+        <Topology NumberOfElements="35344" TopologyType="Triangle" NodesPerElement="3">
+          <DataItem Dimensions="35344 3" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_1/mesh/topology</DataItem>
+        </Topology>
+        <Geometry GeometryType="XY">
+          <DataItem Dimensions="17955 2" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_1/mesh/geometry</DataItem>
+        </Geometry>
+        <Time Value="0.000000" />
+        <Attribute ItemType="FiniteElementFunction" ElementFamily="CG" ElementDegree="1" ElementCell="triangle" Name="u_past" Center="Other" AttributeType="Scalar">
+          <DataItem Dimensions="106032 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_1/cell_dofs</DataItem>
+          <DataItem Dimensions="17955 1" NumberType="Float" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_1/vector</DataItem>
+          <DataItem Dimensions="35345 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_1/x_cell_dofs</DataItem>
+          <DataItem Dimensions="35344 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:u_past/u_past_1/cells</DataItem>
+        </Attribute>
+      </Grid>
+    </Grid>
+    <Grid GridType="Collection" CollectionType="Temporal" Name="v_past">
+      <Grid Name="v_past_0" GridType="Uniform">
+        <Topology NumberOfElements="35344" TopologyType="Triangle" NodesPerElement="3">
+          <DataItem Dimensions="35344 3" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_0/mesh/topology</DataItem>
+        </Topology>
+        <Geometry GeometryType="XY">
+          <DataItem Dimensions="17955 2" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_0/mesh/geometry</DataItem>
+        </Geometry>
+        <Time Value="0.000000" />
+        <Attribute ItemType="FiniteElementFunction" ElementFamily="CG" ElementDegree="1" ElementCell="triangle" Name="v_past" Center="Other" AttributeType="Scalar">
+          <DataItem Dimensions="106032 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_0/cell_dofs</DataItem>
+          <DataItem Dimensions="17955 1" NumberType="Float" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_0/vector</DataItem>
+          <DataItem Dimensions="35345 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_0/x_cell_dofs</DataItem>
+          <DataItem Dimensions="35344 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_0/cells</DataItem>
+        </Attribute>
+      </Grid>
+      <Grid Name="v_past_1" GridType="Uniform">
+        <Topology NumberOfElements="35344" TopologyType="Triangle" NodesPerElement="3">
+          <DataItem Dimensions="35344 3" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_1/mesh/topology</DataItem>
+        </Topology>
+        <Geometry GeometryType="XY">
+          <DataItem Dimensions="17955 2" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_1/mesh/geometry</DataItem>
+        </Geometry>
+        <Time Value="0.000000" />
+        <Attribute ItemType="FiniteElementFunction" ElementFamily="CG" ElementDegree="1" ElementCell="triangle" Name="v_past" Center="Other" AttributeType="Scalar">
+          <DataItem Dimensions="106032 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_1/cell_dofs</DataItem>
+          <DataItem Dimensions="17955 1" NumberType="Float" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_1/vector</DataItem>
+          <DataItem Dimensions="35345 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_1/x_cell_dofs</DataItem>
+          <DataItem Dimensions="35344 1" NumberType="UInt" Format="HDF">init_state_smooth_elastic_density_freq_100.h5:v_past/v_past_1/cells</DataItem>
+        </Attribute>
+      </Grid>
+    </Grid>
+  </Domain>
+</Xdmf>

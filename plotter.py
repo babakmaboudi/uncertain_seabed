@@ -7,7 +7,7 @@ import dolfin as dl
 
 
 def plot_seabed():
-    data = np.load('./obs/obs2/obs.npz')
+    data = np.load('./obs/obs_smooth/obs.npz')
     p_true = data['param_true']
     N_x = data['N_x']
     N_KL = data['N_KL']
@@ -35,6 +35,7 @@ def plot_seabed():
     f,axes = plt.subplots(5,1, sharex=True, figsize=[7,5])
     for i in range(y_true.shape[0]):
         axes[i].set_ylabel(r'$x$ (km)', fontsize=8)
+        print(y_obs[i].shape)
         im = axes[i].imshow(y_obs[i].T, extent=[700*0.0019,2000*0.0019,-3,3], aspect='auto',vmin=-0.0001, vmax=0.0001)
         axes[i].text(3.6, 1.5,r'$f^0_{} = {}$'.format(i+1,freq[i]) , fontsize=8, ha='center', va='center')
 
@@ -46,7 +47,7 @@ def plot_seabed():
     cbar = f.colorbar(im, cax=cbar_ax, ticks=[-0.0001, 0, 0.0001])
     cbar.formatter.set_powerlimits((0, 0))
 
-    plt.savefig('./plots/measurement.pdf')
+    plt.savefig('./plots/measurement_smooth.pdf')
     exit()
 
     field.set_s(0.75)
@@ -165,5 +166,5 @@ def plot_time_snapshots():
 
 
 if __name__ == '__main__':
-    #plot_seabed()
-    plot_time_snapshots()
+    plot_seabed()
+    #plot_time_snapshots()

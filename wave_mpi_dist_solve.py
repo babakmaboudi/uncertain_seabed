@@ -99,7 +99,7 @@ class wave_speed_matern(dl.UserExpression):
 
         y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
         if( x[1]>y ):
-            values[0] = 1.5
+            values[0] = 1.5*(1 + 0.025*(1.5 - x[1]))
         else:
             values[0] = 6.4
 
@@ -133,7 +133,7 @@ class wave_density_matern(dl.UserExpression):
 
         y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
         if( x[1]>y ):
-            values[0] = 1.
+            values[0] = 1.*( 1. + 0.0044*(1.5 - x[1]) )
         else:
             values[0] = 3.
 
@@ -207,7 +207,7 @@ class wave():
         self.init_u = dl.Function( self.V )
         self.init_v = dl.Function( self.V )
 
-        init_path = './model_params/init_state_structured_freq_{}.xdmf'.format(freq)
+        init_path = './model_params/init_state_smooth_elastic_density_freq_{}.xdmf'.format(freq)
         file = dl.XDMFFile(self.local_comm, init_path)
         file.read_checkpoint(self.init_u, 'u_past', 0)
         file.read_checkpoint(self.init_v, 'v_past', 0)
@@ -336,7 +336,7 @@ class wave():
 
     # this function saves a state of the wave equation (pressure and velocity)
     def save_state(self, time, time_steps, freq, num_source):
-        path = './model_params/init_state_elastic_density_freq_{}.xdmf'.format(freq)
+        path = './model_params/init_state_smooth_elastic_density_freq_{}.xdmf'.format(freq)
 
         dl.plot(self.u_past)
         plt.savefig('init.pdf',format='pdf')
@@ -469,6 +469,8 @@ def test_parallel():
     dist_column_width = 2
     color = int( rank/dist_column_width )
     key = rank%dist_column_width
+    print(color, key)
+    exit()
 
     p_list = []
     for i in range(comm.Get_size()):
@@ -480,6 +482,7 @@ def test_parallel():
 
     problem = wave(N_x=N_x, N_KL=N_KL, comm_world=comm, color=color, key=key)
     problem.initiate_load_source(fmT[color])
+
 
     #p = p = np.random.standard_normal(N_KL)
     #np.savez('png_npz_params.npz', p = p)
@@ -500,7 +503,7 @@ def test_parallel():
         num_obs = int( comm.Get_size()/dist_column_width)
         rcv_bf = np.empty([num_obs, obs.shape[0]*obs.shape[1]])
         comm_collect.Gather(obs.reshape(-1), rcv_bf, root=0)
-        
+
     if(comm.Get_rank() == 0):
         obs_all = rcv_bf
 

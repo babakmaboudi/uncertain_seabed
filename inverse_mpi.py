@@ -5,7 +5,9 @@ from mpi4py import MPI
 import sys
 import os
 
-from sampler import sampler, Gibbs
+import pickle
+
+from sampler import sampler, Gibbs, AIES_sampler_warm_up
 
 #import cuqi
 #from cuqi.distribution import Gaussian, JointDistribution, Uniform
@@ -21,7 +23,7 @@ class forward_problem():
         self.fmT = fmT
 
         # local communicator variables for forward processing
-        self.process_column_width = 2
+        self.process_column_width = 12
         self.color = int( self.rank_world/self.process_column_width )
         self.key = self.rank_world%self.process_column_width
 
@@ -116,6 +118,69 @@ def test_forward():
         print(out.shape)
     else:
         problem.forward_slave()
+
+def run_AIES():
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    problem = forward_problem(comm, rank)
+    num_samples = 250
+    N_AIES = 10
+    N_walkers = 4*N_AIES
+
+    if(rank==0):
+        obs_data = np.load('./obs/obs_smooth/obs.npz')
+        y_true = obs_data['obs_true'].reshape(5,-1)
+        noise_vec = obs_data['noise_vec']
+        N_KL = obs_data['N_KL']
+
+        y_true = y_true.reshape( y_true.shape[0] , -1 )
+        noise_vec = noise_vec.reshape( y_true.shape[0] , -1 )
+
+        y_norm = np.linalg.norm(y_true, axis=1)
+        sigmas = []
+        cov_diag = []
+        y_obs = []
+        for i in range( y_true.shape[0] ):
+            sigmas.append( 0.05*np.linalg.norm( y_true[i] ) )
+            cov_diag.append( sigmas[-1]**2*np.ones_like( y_true[i] ) )
+            y_obs.append( y_true[i] + sigmas[i]*noise_vec[i] )
+
+        sigmas = np.array(sigmas)
+        cov_diag = np.array(cov_diag).flatten()
+        y_obs = np.array(y_obs).flatten()
+
+        np.random.seed(0)
+
+
+        log_prior = lambda x: -0.5*np.sum( x**2 )
+        log_like = lambda x: -0.5*np.sum( (problem.forward_master(x) - y_obs)**2/cov_diag )
+
+        N_AIES = 10
+
+        x0 = np.random.standard_normal([N_walkers, N_KL])
+        print('warm up initiated')
+        sys.stdout.flush()
+        AIES = AIES_sampler_warm_up( x0, log_prior, log_like, N_AIES )
+        AIES.warm_up(N_sample=4, num_windows=20)
+
+        print('warm up finished')
+        sys.stdout.flush()
+
+        AIES.sample(num_samples)
+
+        samples = AIES.get_samples()
+        #with open('./stat/stat_smooth_AIES.pickle', 'wb') as handle:
+        #    pickle.dump(samples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        np.savez('./stat/stat_smooth_AIES.npz',samples=samples)
+
+        AIES.print_summary()
+
+
+    else:
+        for i in range( 2*num_samples*N_walkers + N_walkers + 2*4*20*N_walkers ):
+            problem.forward_slave()
+
 
 def run_pCN():
     comm = MPI.COMM_WORLD
@@ -326,8 +391,9 @@ def dummy():
 
 
 if __name__ == '__main__':
+    run_AIES()
     #run_pCN()
-    run_Gibbs()
+    #run_Gibbs()
     #run_Gibbs_load_checkpoint()
     #dummy()
 

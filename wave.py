@@ -6,10 +6,32 @@ from matern import matern
 from progressbar import progressbar
 
 import dolfin as dl
-import arviz
+#import arviz
 #import mshr
 
 dl.set_log_level(50)
+
+def hpd_interval_numpy(samples: np.ndarray, mass: float = 0.94):
+    if samples.ndim != 2:
+        raise ValueError("samples must be 2D [N, M].")
+    if not (0 < mass < 1):
+        raise ValueError("mass must be in (0, 1).")
+
+    N, M = samples.shape
+    k = int(np.floor(mass * N))
+    if k <= 0:
+        raise ValueError("mass too small for given N.")
+    sortx = np.sort(samples, axis=0)  # [N, M]
+
+    if k >= N:
+        return sortx[0, :], sortx[-1, :]
+
+    # Window widths
+    widths = sortx[k:, :] - sortx[:-k, :]  # [N-k, M]
+    idx = np.argmin(widths, axis=0)        # [M]
+    lower = sortx[idx, np.arange(M)]
+    upper = sortx[idx + k, np.arange(M)]
+    return lower, upper
 
 def boundary_diriichlet(x, on_boundary):
     return on_boundary and dl.near(x[1], 0, 1E-14)
@@ -104,14 +126,15 @@ class wave_speed_matern(dl.UserExpression):
             u.append( self.var*self.field.assemble( sample_p[i] ) )
         u = np.array( u )
 
-        hdi_intervals = []
-        for i in range(u.shape[1]):
-            local_interval = arviz.hdi( u[:,i], hdi_prob=.99 )
-            hdi_intervals.append( local_interval.reshape(-1) )
-        hdi_intervals = np.array(hdi_intervals)
+        #hdi_intervals = []
+        #for i in range(u.shape[1]):
+        #    local_interval = arviz.hdi( u[:,i], hdi_prob=.99 )
+        #    hdi_intervals.append( local_interval.reshape(-1) )
+        #hdi_intervals = np.array(hdi_intervals)
+        hdi_lower, hdi_higher = hpd_interval_numpy(u)
 
         x = np.linspace( -3,3, len(u[0]) )
-        ax.fill_between(x, hdi_intervals[:,0], hdi_intervals[:,1], alpha=0.5,color=color, label=label)
+        ax.fill_between(x, hdi_lower, hdi_higher, alpha=0.5,color=color, label=label)
 
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
@@ -124,7 +147,7 @@ class wave_speed_matern(dl.UserExpression):
 
         y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
         if( x[1]>y ):
-            values[0] = 1.5
+            values[0] = 1.5*(1 + 0.025*(1.5 - x[1]))
         else:
             values[0] = 6.4
 
@@ -158,7 +181,7 @@ class wave_density_matern(dl.UserExpression):
 
         y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
         if( x[1]>y ):
-            values[0] = 1.
+            values[0] = 1.*( 1. + 0.0044*(1.5 - x[1]) )
         else:
             values[0] = 3.
 
@@ -328,7 +351,7 @@ class wave():
         self.u_past.assign( self.init_u )
         self.v_past.assign( self.init_v )
 
-        path = './solution_png/sol_{}'.format(freq_idx) +'_{:05d}.png'
+        path = './solution_smooth_png/sol_{}'.format(freq_idx) +'_{:05d}.png'
         f, ax = plt.subplots(1)
 
         t = 0
@@ -551,13 +574,25 @@ def script_save_init_state():
     problem.initiate_zero_init(fmT)
     problem.save_initial_state()
 
+def save_png():
+    N_x=512
+    N_KL=256 
+
+    fmT = 10
+    problem = wave(N_x=N_x, N_KL=N_KL)
+    problem.initiate_load_source_xdmf(fmT)
+    data = np.load('./model_params/png_npz_params.npz')
+    p = data['p']
+    problem.compute_wave_speed( p )
+    problem.time_stepping_save_png(fmT)
+
 
 
 if __name__ == '__main__':
     #script_save_init_state()
     #save_ref_solution()
     #save_solution()
-    #save_png()
+    save_png()
     #save_obs()
 
-    save_solution_vector()
+    #save_solution_vector()

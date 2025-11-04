@@ -49,17 +49,37 @@ class matern():
 
 def plot_bottom():
     N = 256
-    f, axes = plt.subplots(4,1,sharey=True)
+    num_samples = 10
+    f, axes = plt.subplots(1)
     prior = matern(512, L=6,num_terms=N,delta=1/0.4/0.4,s=.75)
 
-    for i in range(4):
+    for i in range(15):
         p = np.random.standard_normal(N)
         u = prior.assemble(p)
-        axes[i].plot( 5*u )
-        axes[i].set_xticks([])
+        axes.plot( np.linspace(-3,3,512), 5*u )
+        #axes[i].set_xticks([])
 
+    axes.set_aspect('equal')
+    axes.set_xlim([-3,3])
+    axes.set_ylim([-1.5,1.5])
     plt.tight_layout()
-    f.subplots_adjust(wspace=0)
+    #f.subplots_adjust(wspace=0)
+    plt.show()
+
+def plot_bottom_obs():
+    obs_data = np.load('./obs/obs2/obs.npz')
+    p = obs_data['param_true']
+    N_x = obs_data['N_x']
+    N_KL = obs_data['N_KL']
+    prior = matern(N_x, L=6,num_terms=N_KL,delta=1/0.4/0.4,s=.75,load_basis=True)
+
+    f,ax = plt.subplots(1)
+    u = prior.assemble(p)
+    x = np.linspace(-3,3,N_x)
+    ax.plot( x, 5*u )
+    ax.set_xlim([-3,3])
+    ax.set_ylim(-1.5,1.5)
+    ax.set_aspect('equal')
     plt.show()
 
         
