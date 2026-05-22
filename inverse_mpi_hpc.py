@@ -520,9 +520,9 @@ def dummy():
 
 
 if __name__ == '__main__':
-    #run_pCN()
+    run_pCN()
     #run_Gibbs()
-    run_pCN_post()
+    #run_pCN_post()
     #continue_warm_up()
     #run_Gibbs_load_checkpoint()
     #dummy()

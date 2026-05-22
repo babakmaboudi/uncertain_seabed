@@ -1,7 +1,9 @@
 import numpy as np
 import scipy.linalg as linalg
 import matplotlib.pyplot as plt
-from matern import matern
+from matern import matern, white_noise_convolution_1d
+from petsc4py import PETSc
+from slepc4py import SLEPc
 
 from progressbar import progressbar
 
@@ -97,11 +99,12 @@ class wave_speed_matern(dl.UserExpression):
     def __init__(self, N_x, N_kl, **kwargs):
         super().__init__(**kwargs)
         self.num_terms=N_kl
-        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
+        self.field = white_noise_convolution_1d(N_x, sigma=0.25)
+        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
         #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=False, save_basis=True)
         self.x_grid = np.linspace(-3.001,3.001,N_x)
         self.curve = np.zeros(N_x)
-        self.var = 5
+        self.var = 1.
 
     def assemble_curve(self, p):
         self.curve = self.var*self.field.assemble(p)
@@ -110,7 +113,66 @@ class wave_speed_matern(dl.UserExpression):
         return self.var*self.field.assemble(p)
 
     def set_s(self, s):
-        self.field.set_s(s)
+        pass#self.field.set_s(s)
+
+    def plot_curve(self, p, ax, label=None, color=None):
+        u = self.var*self.field.assemble(p)
+        x = np.linspace( -3,3, len(u) )
+        ax.plot(x,u,label=label, color=color)
+        ax.set_aspect('equal')
+        #ax.set_xlim([-2,2])
+        ax.set_ylim([-1.5,1.5])
+
+    def plot_uq(self, sample_p, ax, label=None, color=None):
+        u = []
+        for i in range(sample_p.shape[0]):
+            u.append( self.var*self.field.assemble( sample_p[i] ) )
+        u = np.array( u )
+
+        #hdi_intervals = []
+        #for i in range(u.shape[1]):
+        #    local_interval = arviz.hdi( u[:,i], hdi_prob=.99 )
+        #    hdi_intervals.append( local_interval.reshape(-1) )
+        #hdi_intervals = np.array(hdi_intervals)
+        hdi_lower, hdi_higher = hpd_interval_numpy(u)
+
+        x = np.linspace( -3,3, len(u[0]) )
+        ax.fill_between(x, hdi_lower, hdi_higher, alpha=0.5,color=color, label=label)
+
+    def eval(self, values, x):
+        temp = (x[0] - self.x_grid)>0
+        loc = ( temp[:-1] )*( ~temp[1:] )
+        idx = np.argwhere(loc==True).item()
+        x1 = self.x_grid[idx]
+        y1 = self.curve[idx]
+        x2 = self.x_grid[idx+1]
+        y2 = self.curve[idx+1]
+
+        y = ( (y2 - y1)*x[0] + y1*x2 - x1*y2 )/(x2-x1)
+        if( x[1]>y ):
+            values[0] = 1.5*(1 + 0.025*(1.5 - x[1]))
+        else:
+            values[0] = 6.4
+
+class wave_speed_GP(dl.UserExpression):
+    def __init__(self, N_x, N_kl, **kwargs):
+        super().__init__(**kwargs)
+        self.num_terms=N_kl
+        self.field = white_noise_convolution_1d(N_x, sigma=0.25)
+        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
+        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=False, save_basis=True)
+        self.x_grid = np.linspace(-3.001,3.001,N_x)
+        self.curve = np.zeros(N_x)
+        self.var = 1.
+
+    def assemble_curve(self, p):
+        self.curve = self.var*self.field.assemble(p)
+
+    def give_curve(self, p):
+        return self.var*self.field.assemble(p)
+
+    def set_s(self, s):
+        pass#self.field.set_s(s)
 
     def plot_curve(self, p, ax, label=None, color=None):
         u = self.var*self.field.assemble(p)
@@ -155,11 +217,12 @@ class wave_density_matern(dl.UserExpression):
     def __init__(self, N_x, N_kl, **kwargs):
         super().__init__(**kwargs)
         self.num_terms=N_kl
-        self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
+        self.field = white_noise_convolution_1d(N_x, sigma=0.25)
+        #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=True)
         #self.field = matern(N_x, L=6,num_terms=N_kl,delta=1/0.4/0.4,s=.75,load_basis=False, save_basis=True)
         self.x_grid = np.linspace(-3.001,3.001,N_x)
         self.curve = np.zeros(N_x)
-        self.var = 5
+        self.var = 1
 
     def assemble_curve(self, p):
         self.curve = self.var*self.field.assemble(p)
@@ -168,7 +231,7 @@ class wave_density_matern(dl.UserExpression):
         return self.var*self.field.assemble(p)
 
     def set_s(self, s):
-        self.field.set_s(s)
+        pass#self.field.set_s(s)
 
     def eval(self, values, x):
         temp = (x[0] - self.x_grid)>0
@@ -586,6 +649,115 @@ def save_png():
     problem.compute_wave_speed( p )
     problem.time_stepping_save_png(fmT)
 
+def test_condition_number():
+    N_x=512
+    N_KL=256 
+
+    fmT = 10
+    problem = wave(N_x=N_x, N_KL=N_KL)
+    problem.initiate_load_source_xdmf(fmT)
+    data = np.load('./model_params/png_npz_params.npz')
+    p = data['p']
+    problem.compute_wave_speed(p, 0.5)
+    A = dl.assemble(problem.a)
+
+    A_petsc = dl.as_backend_type(A).mat()
+
+    # Create KSP
+    ksp = PETSc.KSP().create(A_petsc.getComm())
+    ksp.setOperators(A_petsc)
+
+    # Choose solver type
+    ksp.setType("cg")      # use "gmres" if A is not SPD
+    ksp.getPC().setType("none")  # unpreconditioned cond(A)
+
+    # Ask PETSc to compute singular values (condition number estimate)
+    ksp.setComputeSingularValues(True)
+    ksp.setFromOptions()
+
+    # Create compatible vectors
+    n, _ = A_petsc.getSize()
+    b = PETSc.Vec().createMPI(n, comm=A_petsc.getComm())
+    x = PETSc.Vec().createMPI(n, comm=A_petsc.getComm())
+
+    # Use a nonzero RHS (safer than all zeros)
+    b.setRandom()
+    b.assemble()
+
+    # Solve
+    ksp.solve(b, x)
+
+    # Extract estimated extreme singular values
+    sigma_max, sigma_min = ksp.computeExtremeSingularValues()
+    cond_est = sigma_max / sigma_min
+    print("Estimated condition number (2-norm):", cond_est)
+
+def test_condition_number_with_stiffness():
+    N_x=512
+    N_KL=64 
+
+    fmT = 10
+    problem = wave(N_x=N_x, N_KL=N_KL)
+    problem.initiate_load_source_xdmf(fmT)
+    data = np.load('./model_params/png_npz_params.npz')
+    p = np.random.standard_normal(64)
+    problem.compute_wave_speed(p, 0.5)
+    M = dl.assemble(problem.a)
+
+    # FEniCS matrices
+    k = problem.rho*problem.c*problem.c*dl.inner( dl.grad(problem.v), dl.grad(problem.t) )*dl.dx
+    K = dl.assemble(k)
+
+    M_p = dl.as_backend_type(M).mat()
+    K_p = dl.as_backend_type(K).mat()
+
+    E = SLEPc.EPS().create(comm=K_p.getComm())
+    E.setOperators(K_p, M_p)
+    E.setProblemType(SLEPc.EPS.ProblemType.GHEP)   # if K,M are symmetric and M SPD
+
+    # Shift-and-invert targeting eigenvalues near 0 (smallest positive)
+    st = E.getST()
+    st.setType(SLEPc.ST.Type.SINVERT)
+    st.setShift(0.0)
+
+    # Configure the linear solver used inside ST (this matters a lot)
+    ksp = st.getKSP()
+    ksp.setType("cg")                     # for SPD
+    pc = ksp.getPC()
+    pc.setType("gamg")                    # or "hypre" if available; "ilu" in serial
+    ksp.setTolerances(rtol=1e-10, max_it=2000)
+
+    E.setWhichEigenpairs(SLEPc.EPS.Which.TARGET_REAL)
+    E.setTarget(0.0)
+    E.setDimensions(nev=1)
+    E.setTolerances(tol=1e-8, max_it=500)
+    E.setFromOptions()
+
+    E.solve()
+    nconv = E.getConverged()
+    print("min: nconv =", nconv, "reason =", E.getConvergedReason(), "its =", E.getIterationNumber())
+    if nconv == 0:
+        raise RuntimeError("No eigenpairs converged for lambda_min; try a different PC (gamg/hypre/ilu) or tolerances.")
+    lam_min = E.getEigenvalue(0).real
+    print("lambda_min =", lam_min)
+
+    E = SLEPc.EPS().create(comm=K_p.getComm())
+    E.setOperators(K_p, M_p)
+    E.setProblemType(SLEPc.EPS.ProblemType.GHEP)
+    E.setWhichEigenpairs(SLEPc.EPS.Which.LARGEST_REAL)
+    E.setDimensions(nev=1)
+    E.setTolerances(tol=1e-8, max_it=500)
+    E.setFromOptions()
+
+    E.solve()
+    nconv = E.getConverged()
+    print("max: nconv =", nconv, "reason =", E.getConvergedReason(), "its =", E.getIterationNumber())
+    if nconv == 0:
+        raise RuntimeError("No eigenpairs converged for lambda_max.")
+    lam_max = E.getEigenvalue(0).real
+    print("lambda_max =", lam_max)
+    print("cond(M^{-1}K) =", lam_max/lam_min)
+
 if __name__ == '__main__':
     #script_save_init_state()
     #save_ref_solution()
@@ -594,4 +766,5 @@ if __name__ == '__main__':
     #save_obs()
 
     #save_solution_vector()
-    test_condition_number()
+    #test_condition_number()
+    test_condition_number_with_stiffness()
